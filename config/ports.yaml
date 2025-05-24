@@ -1,0 +1,16 @@
+# Dashboard Port Configuration
+
+# Main trading dashboard
+main_dashboard: 5000
+
+# Performance visualization dashboard
+performance_dashboard: 5001
+
+# Alert monitoring dashboard
+alert_dashboard: 5002
+
+# Strategy analysis dashboard
+strategy_dashboard: 5003
+
+# Real-time market data dashboard
+market_dashboard: 5004 

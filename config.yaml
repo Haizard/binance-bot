@@ -1,0 +1,41 @@
+# Binance API Configuration
+api:
+  testnet: false  # Set to true for testing with testnet
+  api_key: "b0tihiWh9Vg085MvsInUdbyeRm7dH2KaZ2aJvc0FYKKDeFd8LH5S4PKMJbbmC9Fw"
+  api_secret: "grXesgnjxyGT6xvfpKpxHfDhoG9iNcBeJ2hSBQTnE4SVprOfa7Tt8aZv6a2LWak3"
+
+# Trading Parameters
+trading:
+  symbols:
+    - "BTCUSDT"
+    - "ETHUSDT"
+  timeframes:
+    - "1m"    # 1 minute
+    - "3m"    # 3 minutes
+    - "5m"    # 5 minutes
+    - "15m"   # 15 minutes
+    - "30m"   # 30 minutes
+    - "1h"    # 1 hour
+    - "2h"    # 2 hours
+    - "4h"    # 4 hours
+    - "6h"    # 6 hours
+    - "8h"    # 8 hours
+    - "12h"   # 12 hours
+    - "1d"    # 1 day
+  position_size: 0.01  # Size of each position in BTC
+  max_positions: 3     # Maximum number of concurrent positions
+
+# Risk Management
+risk:
+  max_drawdown: 0.10   # 10% maximum drawdown
+  stop_loss: 0.02      # 2% stop loss per trade
+  take_profit: 0.04    # 4% take profit per trade
+  daily_loss_limit: 5  # Stop trading if daily loss exceeds 5%
+
+# Technical Analysis Parameters
+analysis:
+  rsi_period: 14
+  rsi_overbought: 70
+  rsi_oversold: 30
+  ema_short: 9
+  ema_long: 21 

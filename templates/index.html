@@ -1,0 +1,175 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Trading Bot - Dashboard{% endblock %}
+
+{% block header_text %}Overview Dashboard{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Trading Summary -->
+    <div class="col-md-3">
+        <div class="dashboard-card">
+            <h5><i class='bx bx-line-chart text-primary'></i> Trading</h5>
+            <div class="mt-3">
+                <h2 class="mb-0">{{ trading_stats.total_trades }}</h2>
+                <small class="text-muted">Total Trades</small>
+            </div>
+            <div class="mt-3">
+                <span class="text-success">
+                    <i class='bx bx-up-arrow-alt'></i> {{ trading_stats.profit_percentage }}%
+                </span>
+                <small class="text-muted ms-2">Profit</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Performance Metrics -->
+    <div class="col-md-3">
+        <div class="dashboard-card">
+            <h5><i class='bx bx-bar-chart-alt-2 text-success'></i> Performance</h5>
+            <div class="mt-3">
+                <h2 class="mb-0">{{ performance_stats.win_rate }}%</h2>
+                <small class="text-muted">Win Rate</small>
+            </div>
+            <div class="mt-3">
+                <span class="text-info">
+                    <i class='bx bx-time'></i> {{ performance_stats.avg_trade_duration }}
+                </span>
+                <small class="text-muted ms-2">Avg Duration</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Alerts -->
+    <div class="col-md-3">
+        <div class="dashboard-card">
+            <h5><i class='bx bx-bell text-warning'></i> Alerts</h5>
+            <div class="mt-3">
+                <h2 class="mb-0">{{ alert_stats.active_alerts }}</h2>
+                <small class="text-muted">Active Alerts</small>
+            </div>
+            <div class="mt-3">
+                <span class="text-warning">
+                    <i class='bx bx-bell'></i> {{ alert_stats.triggered_today }}
+                </span>
+                <small class="text-muted ms-2">Triggered Today</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Market Overview -->
+    <div class="col-md-3">
+        <div class="dashboard-card">
+            <h5><i class='bx bx-trending-up text-danger'></i> Market</h5>
+            <div class="mt-3">
+                <h2 class="mb-0">{{ market_stats.active_pairs }}</h2>
+                <small class="text-muted">Active Pairs</small>
+            </div>
+            <div class="mt-3">
+                <span class="text-danger">
+                    <i class='bx bx-trending-up'></i> {{ market_stats.market_trend }}
+                </span>
+                <small class="text-muted ms-2">Trend</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row -->
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="dashboard-card">
+            <h5>Profit/Loss Timeline</h5>
+            <div id="profitChart" style="height: 300px;"></div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="dashboard-card">
+            <h5>Trading Volume</h5>
+            <div id="volumeChart" style="height: 300px;"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Activity -->
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="dashboard-card">
+            <h5>Recent Activity</h5>
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Type</th>
+                            <th>Pair</th>
+                            <th>Price</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for activity in recent_activities %}
+                        <tr>
+                            <td>{{ activity.time }}</td>
+                            <td>{{ activity.type }}</td>
+                            <td>{{ activity.pair }}</td>
+                            <td>{{ activity.price }}</td>
+                            <td>
+                                <span class="badge bg-{{ activity.status_color }}">
+                                    {{ activity.status }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<script>
+    // Sample data for charts
+    const profitData = {
+        x: {{ profit_chart_data.dates | tojson }},
+        y: {{ profit_chart_data.values | tojson }},
+        type: 'scatter',
+        mode: 'lines',
+        name: 'Profit/Loss',
+        line: {
+            color: '#4723D9'
+        }
+    };
+
+    const volumeData = {
+        x: {{ volume_chart_data.dates | tojson }},
+        y: {{ volume_chart_data.values | tojson }},
+        type: 'bar',
+        name: 'Volume',
+        marker: {
+            color: '#AFA5D9'
+        }
+    };
+
+    const layout = {
+        showlegend: false,
+        margin: { t: 20, l: 40, r: 20, b: 40 },
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: 'rgba(0,0,0,0)',
+        xaxis: {
+            showgrid: true,
+            gridcolor: '#f5f5f5'
+        },
+        yaxis: {
+            showgrid: true,
+            gridcolor: '#f5f5f5'
+        }
+    };
+
+    Plotly.newPlot('profitChart', [profitData], layout);
+    Plotly.newPlot('volumeChart', [volumeData], layout);
+</script>
+{% endblock %} 

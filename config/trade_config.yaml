@@ -1,0 +1,66 @@
+# Trade Agent Configuration
+
+# Trading settings
+trading_enabled: false  # Set to true to enable live trading
+quote_currency: USDT   # Base currency for trading
+test_mode: true       # Use testnet when true
+
+# API Configuration
+api_key: ""          # Your Binance API key
+api_secret: ""       # Your Binance API secret
+
+# Risk Management
+risk_per_trade: 0.01          # Risk 1% of account per trade
+max_position_size: 0.1        # Maximum position size as fraction of account
+stop_loss_percent: 0.02       # 2% stop loss
+take_profit_percent: 0.04     # 4% take profit
+max_positions: 5              # Maximum number of concurrent positions
+max_drawdown: 0.1            # Maximum allowed drawdown (10%)
+max_position_concentration: 0.2  # Maximum single position size (20% of portfolio)
+
+# Trading Parameters
+min_signal_strength: 0.5      # Minimum signal strength to execute trade
+min_confidence: 0.7           # Minimum signal confidence to execute trade
+order_type: LIMIT             # Default order type (LIMIT, MARKET)
+price_deviation: 0.001        # Maximum allowed price deviation for limit orders
+
+# Position Management
+close_positions_on_shutdown: true  # Close all positions when shutting down
+trailing_stop: false              # Enable trailing stop loss
+trailing_stop_distance: 0.01      # Trailing stop distance (1%)
+
+# Trading Hours (24-hour format)
+trading_hours:
+  enabled: false  # Set to true to enable trading hours restriction
+  start: 0       # Start hour (0-23)
+  end: 24        # End hour (1-24)
+
+# Performance Optimization
+order_update_interval: 1    # Order update check interval (seconds)
+position_update_interval: 5  # Position update check interval (seconds)
+
+# Logging and Notifications
+log_trades: true           # Log all trades
+notify_on_trade: true      # Send notifications for trades
+notify_on_error: true      # Send notifications for errors
+
+# Exchange Settings
+exchange:
+  name: binance
+  testnet: true           # Use testnet for testing
+  timeout: 5000           # API timeout in milliseconds
+  retry_attempts: 3       # Number of retry attempts for failed requests
+  
+# Order Execution
+execution:
+  max_retries: 3          # Maximum number of order placement retries
+  retry_delay: 1          # Delay between retries (seconds)
+  price_checks: true      # Enable pre-execution price checks
+  slippage_tolerance: 0.01  # Maximum allowed slippage (1%)
+
+# Risk Limits
+risk_limits:
+  daily_loss_limit: 0.05   # Maximum daily loss (5% of account)
+  weekly_loss_limit: 0.15  # Maximum weekly loss (15% of account)
+  max_trades_per_day: 10   # Maximum number of trades per day
+  min_volume_24h: 1000000  # Minimum 24h volume for trading pair 

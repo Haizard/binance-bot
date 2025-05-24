@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trading Dashboard</title>
+    <script src="https://cdn.plot.ly/plotly-2.27.1.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #1a1a1a;
+            color: #ffffff;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1800px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background-color: #2a2a2a;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 2.5em;
+            color: #00ff88;
+        }
+        
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 30px;
+            padding: 20px;
+            background-color: #2a2a2a;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+        }
+        
+        select {
+            padding: 12px 24px;
+            border-radius: 8px;
+            background-color: #333;
+            color: white;
+            border: 2px solid #00ff88;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        select:hover {
+            background-color: #444;
+            border-color: #00ffaa;
+        }
+        
+        .chart-container {
+            margin-bottom: 40px;
+            background-color: #2a2a2a;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.2);
+            height: 600px;
+        }
+        
+        .chart-row {
+            display: flex;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+        
+        .chart-col {
+            flex: 1;
+            min-width: 0;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 50px;
+            font-size: 1.2em;
+            color: #888;
+        }
+        
+        /* Animation for loading state */
+        .loading:after {
+            content: '...';
+            animation: dots 1.5s steps(5, end) infinite;
+        }
+        
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60% { content: '...'; }
+            80% { content: '....'; }
+            100% { content: '.....'; }
+        }
+        
+        /* Responsive design */
+        @media (max-width: 1200px) {
+            .chart-row {
+                flex-direction: column;
+            }
+            
+            .chart-container {
+                height: 500px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Crypto Trading Dashboard</h1>
+        </div>
+        
+        <div class="controls">
+            <select id="symbol-select">
+                <option value="BTCUSDT">BTC/USDT</option>
+                <option value="ETHUSDT">ETH/USDT</option>
+            </select>
+            
+            <select id="timeframe-select">
+                <option value="1m">1 Minute</option>
+                <option value="3m">3 Minutes</option>
+                <option value="5m">5 Minutes</option>
+                <option value="15m">15 Minutes</option>
+                <option value="30m">30 Minutes</option>
+                <option value="1h">1 Hour</option>
+                <option value="2h">2 Hours</option>
+                <option value="4h">4 Hours</option>
+                <option value="6h">6 Hours</option>
+                <option value="8h">8 Hours</option>
+                <option value="12h">12 Hours</option>
+                <option value="1d">1 Day</option>
+            </select>
+        </div>
+        
+        <div class="chart-row">
+            <div class="chart-col">
+                <div class="chart-container">
+                    <div id="price-chart" class="loading">Loading price chart</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="chart-row">
+            <div class="chart-col">
+                <div class="chart-container">
+                    <div id="volume-chart" class="loading">Loading volume chart</div>
+                </div>
+            </div>
+            <div class="chart-col">
+                <div class="chart-container">
+                    <div id="pnl-chart" class="loading">Loading P&L chart</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Configure Plotly defaults
+        Plotly.setPlotConfig({
+            responsive: true,
+            displaylogo: false,
+            modeBarButtonsToRemove: ['sendDataToCloud', 'autoScale2d', 'resetScale2d']
+        });
+
+        let updateInProgress = false;
+        let lastUpdateTime = 0;
+        const UPDATE_INTERVAL = 60000; // 60 seconds
+        let retryCount = 0;
+        const MAX_RETRIES = 3;
+
+        function showLoading(containerId) {
+            $(`#${containerId}`).html(`
+                <div class="loading-container" style="display: flex; justify-content: center; align-items: center; height: 400px;">
+                    <div style="text-align: center;">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                        <p class="mt-2">Loading data...</p>
+                    </div>
+                </div>
+            `);
+        }
+
+        function showError(containerId, message) {
+            $(`#${containerId}`).html(`
+                <div class="error-container" style="display: flex; justify-content: center; align-items: center; height: 400px;">
+                    <div style="text-align: center; color: #ff3366;">
+                        <i class="fas fa-exclamation-circle fa-2x mb-2"></i>
+                        <p>${message}</p>
+                        <button class="btn btn-outline-primary btn-sm mt-2" onclick="retryUpdate()">
+                            Retry
+                        </button>
+                    </div>
+                </div>
+            `);
+        }
+
+        function updateCharts() {
+            if (updateInProgress) {
+                return;
+            }
+
+            const now = Date.now();
+            if (now - lastUpdateTime < UPDATE_INTERVAL && lastUpdateTime !== 0) {
+                return;
+            }
+
+            updateInProgress = true;
+            const symbol = $('#symbol-select').val();
+            const timeframe = $('#timeframe-select').val();
+
+            // Show loading state
+            showLoading('price-chart');
+            showLoading('volume-chart');
+            showLoading('pnl-chart');
+
+            fetch(`/data/${symbol}/${timeframe}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        throw new Error(data.error);
+                    }
+
+                    // Update charts if data is available
+                    if (data.price_chart) {
+                        Plotly.newPlot('price-chart', JSON.parse(data.price_chart));
+                    }
+                    if (data.volume_chart) {
+                        Plotly.newPlot('volume-chart', JSON.parse(data.volume_chart));
+                    }
+                    if (data.pnl_chart) {
+                        Plotly.newPlot('pnl-chart', JSON.parse(data.pnl_chart));
+                    }
+
+                    lastUpdateTime = now;
+                    retryCount = 0;
+                })
+                .catch(error => {
+                    console.error('Error updating charts:', error);
+                    showError('price-chart', 'Failed to load price data');
+                    showError('volume-chart', 'Failed to load volume data');
+                    showError('pnl-chart', 'Failed to load P&L data');
+
+                    if (retryCount < MAX_RETRIES) {
+                        retryCount++;
+                        setTimeout(updateCharts, 5000); // Retry after 5 seconds
+                    }
+                })
+                .finally(() => {
+                    updateInProgress = false;
+                });
+        }
+
+        function retryUpdate() {
+            retryCount = 0;
+            lastUpdateTime = 0;
+            updateCharts();
+        }
+
+        // Initial update
+        updateCharts();
+
+        // Set up periodic updates
+        setInterval(updateCharts, UPDATE_INTERVAL);
+
+        // Update when symbol or timeframe changes
+        $('#symbol-select, #timeframe-select').change(function() {
+            lastUpdateTime = 0;
+            updateCharts();
+        });
+    </script>
+</body>
+</html> 

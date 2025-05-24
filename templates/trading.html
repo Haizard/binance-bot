@@ -1,0 +1,138 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Trading Bot - Trading Dashboard{% endblock %}
+
+{% block header_text %}Trading Dashboard{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Active Trades -->
+    <div class="col-md-8">
+        <div class="dashboard-card">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h5><i class='bx bx-line-chart text-primary'></i> Active Trades</h5>
+                <button class="btn btn-primary btn-sm">
+                    <i class='bx bx-plus'></i> New Trade
+                </button>
+            </div>
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Pair</th>
+                            <th>Entry Price</th>
+                            <th>Current Price</th>
+                            <th>P/L</th>
+                            <th>Duration</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for trade in active_trades %}
+                        <tr>
+                            <td>{{ trade.pair }}</td>
+                            <td>{{ trade.entry_price }}</td>
+                            <td>{{ trade.current_price }}</td>
+                            <td class="text-{{ trade.pl_color }}">{{ trade.pl }}</td>
+                            <td>{{ trade.duration }}</td>
+                            <td>
+                                <button class="btn btn-danger btn-sm">Close</button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Trading Stats -->
+    <div class="col-md-4">
+        <div class="dashboard-card">
+            <h5><i class='bx bx-stats text-success'></i> Trading Stats</h5>
+            <div class="mt-4">
+                <div class="d-flex justify-content-between mb-3">
+                    <span>Win Rate</span>
+                    <span class="text-success">{{ trading_stats.win_rate }}%</span>
+                </div>
+                <div class="d-flex justify-content-between mb-3">
+                    <span>Total Trades</span>
+                    <span>{{ trading_stats.total_trades }}</span>
+                </div>
+                <div class="d-flex justify-content-between mb-3">
+                    <span>Profit Factor</span>
+                    <span class="text-primary">{{ trading_stats.profit_factor }}</span>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <span>Average Trade</span>
+                    <span class="text-{{ trading_stats.avg_trade_color }}">{{ trading_stats.avg_trade }}</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="dashboard-card mt-4">
+            <h5><i class='bx bx-wallet text-warning'></i> Account Summary</h5>
+            <div class="mt-4">
+                <div class="d-flex justify-content-between mb-3">
+                    <span>Balance</span>
+                    <span>{{ account.balance }}</span>
+                </div>
+                <div class="d-flex justify-content-between mb-3">
+                    <span>Equity</span>
+                    <span>{{ account.equity }}</span>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <span>Used Margin</span>
+                    <span class="text-warning">{{ account.used_margin }}</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Trade History -->
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="dashboard-card">
+            <h5><i class='bx bx-history text-info'></i> Trade History</h5>
+            <div class="table-responsive mt-4">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Pair</th>
+                            <th>Type</th>
+                            <th>Entry</th>
+                            <th>Exit</th>
+                            <th>P/L</th>
+                            <th>Duration</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for trade in trade_history %}
+                        <tr>
+                            <td>{{ trade.date }}</td>
+                            <td>{{ trade.pair }}</td>
+                            <td>{{ trade.type }}</td>
+                            <td>{{ trade.entry }}</td>
+                            <td>{{ trade.exit }}</td>
+                            <td class="text-{{ trade.pl_color }}">{{ trade.pl }}</td>
+                            <td>{{ trade.duration }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Add any trading-specific JavaScript here
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize any trading-specific functionality
+    });
+</script>
+{% endblock %} 

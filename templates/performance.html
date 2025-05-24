@@ -1,0 +1,242 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Trading Bot - Performance Analysis{% endblock %}
+
+{% block header_text %}Performance Analysis{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Performance Overview -->
+    <div class="col-md-12">
+        <div class="dashboard-card">
+            <h5><i class='bx bx-line-chart text-primary'></i> Performance Overview</h5>
+            <div class="row mt-4">
+                <div class="col-md-3">
+                    <div class="text-center">
+                        <h3 class="mb-0 text-success">{{ performance.total_profit }}%</h3>
+                        <small class="text-muted">Total Return</small>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-center">
+                        <h3 class="mb-0">{{ performance.win_rate }}%</h3>
+                        <small class="text-muted">Win Rate</small>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-center">
+                        <h3 class="mb-0">{{ performance.profit_factor }}</h3>
+                        <small class="text-muted">Profit Factor</small>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-center">
+                        <h3 class="mb-0">{{ performance.sharpe_ratio }}</h3>
+                        <small class="text-muted">Sharpe Ratio</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Equity Curve and Drawdown -->
+<div class="row mt-4">
+    <div class="col-md-8">
+        <div class="dashboard-card">
+            <h5><i class='bx bx-trending-up text-success'></i> Equity Curve</h5>
+            <div id="equityChart" style="height: 400px;"></div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="dashboard-card">
+            <h5><i class='bx bx-trending-down text-danger'></i> Drawdown Analysis</h5>
+            <div class="mt-4">
+                <div class="d-flex justify-content-between mb-3">
+                    <span>Maximum Drawdown</span>
+                    <span class="text-danger">{{ performance.max_drawdown }}%</span>
+                </div>
+                <div class="d-flex justify-content-between mb-3">
+                    <span>Average Drawdown</span>
+                    <span>{{ performance.avg_drawdown }}%</span>
+                </div>
+                <div class="d-flex justify-content-between mb-3">
+                    <span>Recovery Time</span>
+                    <span>{{ performance.recovery_time }}</span>
+                </div>
+                <div class="d-flex justify-content-between">
+                    <span>Current Drawdown</span>
+                    <span class="text-{{ 'danger' if performance.current_drawdown > 5 else 'warning' }}">
+                        {{ performance.current_drawdown }}%
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Trading Metrics -->
+<div class="row mt-4">
+    <div class="col-md-6">
+        <div class="dashboard-card">
+            <h5><i class='bx bx-stats text-info'></i> Trade Statistics</h5>
+            <div class="table-responsive mt-4">
+                <table class="table">
+                    <tbody>
+                        <tr>
+                            <td>Total Trades</td>
+                            <td class="text-end">{{ performance.total_trades }}</td>
+                        </tr>
+                        <tr>
+                            <td>Profitable Trades</td>
+                            <td class="text-end text-success">{{ performance.profitable_trades }}</td>
+                        </tr>
+                        <tr>
+                            <td>Loss-Making Trades</td>
+                            <td class="text-end text-danger">{{ performance.losing_trades }}</td>
+                        </tr>
+                        <tr>
+                            <td>Average Win</td>
+                            <td class="text-end text-success">{{ performance.avg_win }}</td>
+                        </tr>
+                        <tr>
+                            <td>Average Loss</td>
+                            <td class="text-end text-danger">{{ performance.avg_loss }}</td>
+                        </tr>
+                        <tr>
+                            <td>Largest Win</td>
+                            <td class="text-end text-success">{{ performance.largest_win }}</td>
+                        </tr>
+                        <tr>
+                            <td>Largest Loss</td>
+                            <td class="text-end text-danger">{{ performance.largest_loss }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="dashboard-card">
+            <h5><i class='bx bx-time text-warning'></i> Time Analysis</h5>
+            <div class="table-responsive mt-4">
+                <table class="table">
+                    <tbody>
+                        <tr>
+                            <td>Average Trade Duration</td>
+                            <td class="text-end">{{ performance.avg_duration }}</td>
+                        </tr>
+                        <tr>
+                            <td>Best Trading Day</td>
+                            <td class="text-end">{{ performance.best_day }}</td>
+                        </tr>
+                        <tr>
+                            <td>Worst Trading Day</td>
+                            <td class="text-end">{{ performance.worst_day }}</td>
+                        </tr>
+                        <tr>
+                            <td>Most Active Hours</td>
+                            <td class="text-end">{{ performance.active_hours }}</td>
+                        </tr>
+                        <tr>
+                            <td>Time Between Trades</td>
+                            <td class="text-end">{{ performance.time_between_trades }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Monthly Performance -->
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="dashboard-card">
+            <h5><i class='bx bx-calendar text-primary'></i> Monthly Performance</h5>
+            <div class="table-responsive mt-4">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Month</th>
+                            <th>Return</th>
+                            <th>Trades</th>
+                            <th>Win Rate</th>
+                            <th>Profit Factor</th>
+                            <th>Max Drawdown</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for month in performance.monthly_stats %}
+                        <tr>
+                            <td>{{ month.month }}</td>
+                            <td class="text-{{ 'success' if month.return > 0 else 'danger' }}">
+                                {{ month.return }}%
+                            </td>
+                            <td>{{ month.trades }}</td>
+                            <td>{{ month.win_rate }}%</td>
+                            <td>{{ month.profit_factor }}</td>
+                            <td class="text-danger">{{ month.max_drawdown }}%</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+<script>
+    // Equity curve chart
+    const equityData = {
+        x: {{ performance.equity_curve.dates | tojson }},
+        y: {{ performance.equity_curve.values | tojson }},
+        type: 'scatter',
+        mode: 'lines',
+        name: 'Equity',
+        line: {
+            color: '#4723D9'
+        }
+    };
+
+    const drawdownData = {
+        x: {{ performance.drawdown_curve.dates | tojson }},
+        y: {{ performance.drawdown_curve.values | tojson }},
+        type: 'scatter',
+        mode: 'lines',
+        name: 'Drawdown',
+        line: {
+            color: '#dc3545'
+        },
+        yaxis: 'y2'
+    };
+
+    const layout = {
+        showlegend: true,
+        margin: { t: 20, l: 40, r: 40, b: 40 },
+        paper_bgcolor: 'rgba(0,0,0,0)',
+        plot_bgcolor: 'rgba(0,0,0,0)',
+        xaxis: {
+            showgrid: true,
+            gridcolor: '#f5f5f5'
+        },
+        yaxis: {
+            showgrid: true,
+            gridcolor: '#f5f5f5',
+            title: 'Equity'
+        },
+        yaxis2: {
+            showgrid: false,
+            title: 'Drawdown',
+            overlaying: 'y',
+            side: 'right',
+            range: [0, 100]
+        }
+    };
+
+    Plotly.newPlot('equityChart', [equityData, drawdownData], layout);
+</script>
+{% endblock %} 

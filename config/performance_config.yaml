@@ -1,0 +1,84 @@
+# Performance Agent Configuration
+
+# Performance Tracking
+tracking:
+  enabled: true
+  save_data: true
+  data_directory: "data/performance"
+  update_interval: 60  # Update interval in seconds
+  risk_free_rate: 0.02  # Annual risk-free rate for Sharpe ratio calculation
+
+# Risk Monitoring
+risk_limits:
+  daily_loss_limit: 0.05    # Maximum daily loss as fraction of account
+  weekly_loss_limit: 0.15   # Maximum weekly loss as fraction of account
+  max_drawdown_limit: 0.20  # Maximum allowed drawdown
+  position_size_limit: 0.25 # Maximum single position size
+  leverage_limit: 3.0       # Maximum allowed leverage
+  max_positions: 10         # Maximum number of concurrent positions
+  min_win_rate: 0.40       # Minimum required win rate
+
+# Performance Metrics
+metrics:
+  track_daily_stats: true
+  track_trade_history: true
+  track_position_metrics: true
+  calculate_risk_metrics: true
+  include_unrealized_pnl: true
+  rolling_window_days: 30   # Days for rolling metrics calculation
+
+# Trade Analysis
+trade_analysis:
+  analyze_win_rate: true
+  analyze_profit_factor: true
+  analyze_risk_reward: true
+  analyze_hold_time: true
+  analyze_drawdown: true
+  analyze_volatility: true
+  analyze_correlation: true
+
+# Report Generation
+reporting:
+  generate_daily_report: true
+  generate_weekly_report: true
+  generate_monthly_report: true
+  include_charts: true
+  include_trade_list: true
+  include_risk_metrics: true
+  report_format: "html"
+  report_directory: "reports/performance"
+
+# Alert Settings
+alerts:
+  enabled: true
+  notify_on_trade: true
+  notify_on_limit_breach: true
+  notify_on_drawdown: true
+  drawdown_alert_threshold: 0.10
+  loss_streak_alert: 3
+  win_rate_alert_threshold: 0.40
+  risk_exposure_alert: 0.80
+
+# Data Storage
+storage:
+  save_trades: true
+  save_metrics: true
+  save_reports: true
+  backup_enabled: true
+  backup_interval: 86400  # Daily backup (in seconds)
+  retention_days: 365    # Data retention period in days
+
+# Performance Visualization
+visualization:
+  enabled: true
+  update_interval: 300  # Update interval in seconds
+  chart_types:
+    - equity_curve
+    - drawdown
+    - win_rate
+    - profit_distribution
+    - trade_duration
+    - position_size
+  include_benchmarks: true
+  include_statistics: true
+  interactive_mode: true 
