@@ -81,13 +81,13 @@
                             </td>
                             <td>{{ strategy.updated_at }}</td>
                             <td>
-                                <button class="btn btn-sm btn-info me-1" onclick="viewStrategy('{{ strategy._id }}')">
+                                <button class="btn btn-sm btn-info me-1" onclick="viewStrategy('{{ strategy.id }}')">
                                     <i class='bx bx-show'></i>
                                 </button>
-                                <button class="btn btn-sm btn-warning me-1" onclick="editStrategy('{{ strategy._id }}')">
+                                <button class="btn btn-sm btn-warning me-1" onclick="editStrategy('{{ strategy.id }}')">
                                     <i class='bx bx-edit'></i>
                                 </button>
-                                <button class="btn btn-sm btn-danger" onclick="deleteStrategy('{{ strategy._id }}')">
+                                <button class="btn btn-sm btn-danger" onclick="deleteStrategy('{{ strategy.id }}')">
                                     <i class='bx bx-trash'></i>
                                 </button>
                             </td>
@@ -232,8 +232,48 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-<script>
+    <!-- Plotly.js -->
+    <script src="https://cdn.plot.ly/plotly-3.0.1.min.js"></script>
+    
+    <script>
+// WebSocket connection handling
+let ws;
+let reconnectAttempts = 0;
+const maxReconnectAttempts = 5;
+const reconnectDelay = 2000; // Start with 2 seconds
+
+function connectWebSocket() {
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const wsUrl = wsProtocol + '//' + window.location.host + '/ws';
+    
+    ws = new WebSocket(wsUrl);
+    
+    ws.onopen = function() {
+        console.log('WebSocket connection established');
+        reconnectAttempts = 0; // Reset attempts on successful connection
+    };
+    
+    ws.onclose = function() {
+        console.log('WebSocket connection closed');
+        if (reconnectAttempts < maxReconnectAttempts) {
+            setTimeout(function() {
+                reconnectAttempts++;
+                console.log(`Attempting to reconnect (${reconnectAttempts}/${maxReconnectAttempts})`);
+                connectWebSocket();
+            }, reconnectDelay * Math.pow(2, reconnectAttempts - 1)); // Exponential backoff
+        } else {
+            console.error('Max reconnection attempts reached');
+        }
+    };
+    
+    ws.onerror = function(error) {
+        console.error('WebSocket error:', error);
+    };
+}
+
+// Initialize WebSocket connection
+connectWebSocket();
+
 // Performance comparison chart
 const performanceData = {
     x: {{ performance_data.dates | tojson }},

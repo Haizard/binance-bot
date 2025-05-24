@@ -21,7 +21,7 @@ project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(o
 sys.path.append(project_root)
 
 from src.strategies.python_base_strategy import PythonBaseStrategy
-from src.strategies.custom.strategy_adapter import (
+from custom.strategy_adapter import (
     StrategyAdapter,
     DirectionalChangeStrategy,
     RSIPCAStrategy,
@@ -47,8 +47,8 @@ from src.strategies.custom.strategy_adapter import (
 
 # Strategy directories to search in
 STRATEGY_DIRS = [
-    "src/strategies/custom",
-    "src/strategies/examples"
+    "custom",
+    "examples"
 ]
 
 # Files that should not be treated as strategy modules

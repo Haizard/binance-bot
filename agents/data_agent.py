@@ -5,7 +5,7 @@ import logging
 import pandas as pd
 from typing import Any, Dict, Optional, List
 from binance.client import Client
-from binance.websockets import BinanceSocketManager
+from binance import ThreadedWebsocketManager
 from datetime import datetime, timedelta
 from .base_agent import BaseAgent
 import asyncio
@@ -26,7 +26,7 @@ class DataAgent(BaseAgent):
         """
         super().__init__("Data", message_broker)
         self.client: Optional[Client] = None
-        self.socket_manager: Optional[BinanceSocketManager] = None
+        self.socket_manager: Optional[ThreadedWebsocketManager] = None
         self.websocket_connections = {}
         self.price_cache = {}
         self.historical_data = {}
@@ -54,9 +54,9 @@ class DataAgent(BaseAgent):
         """Clean up the data agent."""
         # Close all WebSocket connections
         if self.socket_manager:
+            self.socket_manager.stop()
             for symbol in list(self.websocket_connections.keys()):
                 await self._stop_symbol_stream(symbol)
-            self.socket_manager.close()
         
         # Unsubscribe from all topics
         for topic in list(self.subscriptions):
@@ -187,7 +187,13 @@ class DataAgent(BaseAgent):
                 self.api_keys['api_key'],
                 self.api_keys['api_secret']
             )
-            self.socket_manager = BinanceSocketManager(self.client)
+            if self.socket_manager:
+                self.socket_manager.stop()
+            self.socket_manager = ThreadedWebsocketManager(
+                api_key=self.api_keys['api_key'],
+                api_secret=self.api_keys['api_secret']
+            )
+            self.socket_manager.start()
             logger.info("Binance client initialized")
         else:
             logger.error("Cannot initialize Binance client - missing API keys")
@@ -202,22 +208,24 @@ class DataAgent(BaseAgent):
         if not self.socket_manager:
             logger.error("Cannot start stream - socket manager not initialized")
             return
-        
+
         if symbol in self.websocket_connections:
+            logger.warning(f"Stream for {symbol} already exists")
             return
-        
+
         try:
-            # Start kline/candlestick WebSocket
-            conn_key = self.socket_manager.start_kline_socket(
-                symbol,
-                self._handle_socket_message,
+            # Start kline/candlestick stream
+            stream_name = self.socket_manager.start_kline_socket(
+                callback=self._handle_socket_message,
+                symbol=symbol,
                 interval=self.interval
             )
-            self.websocket_connections[symbol] = conn_key
-            logger.info(f"Started WebSocket stream for {symbol}")
+            
+            self.websocket_connections[symbol] = stream_name
+            logger.info(f"Started {symbol} stream")
             
         except Exception as e:
-            logger.error(f"Error starting WebSocket for {symbol}: {str(e)}")
+            logger.error(f"Error starting {symbol} stream: {str(e)}")
             raise
 
     async def _stop_symbol_stream(self, symbol: str) -> None:
@@ -227,18 +235,23 @@ class DataAgent(BaseAgent):
         Args:
             symbol (str): Trading pair symbol
         """
-        if symbol in self.websocket_connections:
-            try:
-                self.socket_manager.stop_socket(self.websocket_connections[symbol])
-                del self.websocket_connections[symbol]
-                logger.info(f"Stopped WebSocket stream for {symbol}")
-            except Exception as e:
-                logger.error(f"Error stopping WebSocket for {symbol}: {str(e)}")
+        if symbol not in self.websocket_connections:
+            return
+
+        try:
+            stream_name = self.websocket_connections[symbol]
+            self.socket_manager.stop_socket(stream_name)
+            del self.websocket_connections[symbol]
+            logger.info(f"Stopped {symbol} stream")
+            
+        except Exception as e:
+            logger.error(f"Error stopping {symbol} stream: {str(e)}")
+            raise
 
     async def _restart_streams(self) -> None:
-        """Restart all active WebSocket streams."""
-        symbols = list(self.active_symbols)
-        for symbol in symbols:
+        """Restart all active streams with new settings."""
+        active_symbols = list(self.active_symbols)
+        for symbol in active_symbols:
             await self._stop_symbol_stream(symbol)
             await self._start_symbol_stream(symbol)
 
@@ -298,43 +311,43 @@ class DataAgent(BaseAgent):
 
     def _handle_socket_message(self, msg: Dict[str, Any]) -> None:
         """
-        Handle incoming WebSocket messages.
+        Process incoming WebSocket messages.
         
         Args:
-            msg (dict): WebSocket message
+            msg (dict): Message from WebSocket
         """
         try:
             if msg.get('e') == 'error':
                 logger.error(f"WebSocket error: {msg.get('m')}")
                 return
-            
-            # Extract kline data
-            kline = msg.get('k', {})
-            symbol = kline.get('s')
-            if not symbol:
-                return
-            
-            # Create candle data
-            candle = {
-                'timestamp': pd.to_datetime(kline['t'], unit='ms'),
-                'open': float(kline['o']),
-                'high': float(kline['h']),
-                'low': float(kline['l']),
-                'close': float(kline['c']),
-                'volume': float(kline['v']),
-                'closed': kline['x']
-            }
-            
-            # Update price cache
-            self.price_cache[symbol] = candle
-            
-            # Broadcast update if candle is closed
-            if candle['closed']:
+
+            # Extract relevant data from the message
+            if msg.get('e') == 'kline':
+                kline = msg['k']
+                symbol = msg['s']
+                
+                data = {
+                    'symbol': symbol,
+                    'interval': kline['i'],
+                    'open_time': kline['t'],
+                    'open': float(kline['o']),
+                    'high': float(kline['h']),
+                    'low': float(kline['l']),
+                    'close': float(kline['c']),
+                    'volume': float(kline['v']),
+                    'close_time': kline['T'],
+                    'is_closed': kline['x']
+                }
+                
+                # Update price cache
+                self.price_cache[symbol] = float(kline['c'])
+                
+                # Broadcast update
                 asyncio.create_task(
-                    self.send_message(f"data.update.{symbol}", {
-                        'symbol': symbol,
-                        'data': candle
-                    })
+                    self.send_message(
+                        f"data.update.{symbol}",
+                        {'type': 'kline', 'data': data}
+                    )
                 )
                 
         except Exception as e:
@@ -350,5 +363,4 @@ class DataAgent(BaseAgent):
         Returns:
             float: Latest price or None if not available
         """
-        candle = self.price_cache.get(symbol)
-        return float(candle['close']) if candle else None 
+        return self.price_cache.get(symbol) 

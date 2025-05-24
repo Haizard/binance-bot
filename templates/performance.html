@@ -1,182 +1,156 @@
 {% extends "layouts/base.html" %}
 
-{% block title %}Trading Bot - Performance Analysis{% endblock %}
+{% block title %}Trading Bot - Performance{% endblock %}
 
-{% block header_text %}Performance Analysis{% endblock %}
+{% block header_text %}Performance Analytics{% endblock %}
 
 {% block content %}
 <div class="row">
-    <!-- Performance Overview -->
-    <div class="col-md-12">
+    <!-- Total Trades -->
+    <div class="col-md-3">
         <div class="dashboard-card">
-            <h5><i class='bx bx-line-chart text-primary'></i> Performance Overview</h5>
-            <div class="row mt-4">
-                <div class="col-md-3">
-                    <div class="text-center">
-                        <h3 class="mb-0 text-success">{{ performance.total_profit }}%</h3>
-                        <small class="text-muted">Total Return</small>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="text-center">
-                        <h3 class="mb-0">{{ performance.win_rate }}%</h3>
-                        <small class="text-muted">Win Rate</small>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="text-center">
-                        <h3 class="mb-0">{{ performance.profit_factor }}</h3>
-                        <small class="text-muted">Profit Factor</small>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="text-center">
-                        <h3 class="mb-0">{{ performance.sharpe_ratio }}</h3>
-                        <small class="text-muted">Sharpe Ratio</small>
-                    </div>
-                </div>
+            <h5><i class='bx bx-line-chart text-primary'></i> Trading</h5>
+            <div class="mt-3">
+                <h2 class="mb-0" id="total-trades">{{ performance_stats.total_trades }}</h2>
+                <small class="text-muted">Total Trades</small>
+            </div>
+            <div class="mt-3">
+                <span class="text-{{ 'success' if performance_stats.total_profit > 0 else 'danger' }}" id="total-profit">
+                    <i class='bx bx-{{ 'up' if performance_stats.total_profit > 0 else 'down' }}-arrow-alt'></i> 
+                    {{ "%.2f"|format(performance_stats.total_profit) }}
+                </span>
+                <small class="text-muted ms-2">Total Profit</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Win Rate -->
+    <div class="col-md-3">
+        <div class="dashboard-card">
+            <h5><i class='bx bx-trophy text-success'></i> Win Rate</h5>
+            <div class="mt-3">
+                <h2 class="mb-0" id="win-rate">{{ "%.1f"|format(performance_stats.win_rate) }}%</h2>
+                <small class="text-muted">Success Rate</small>
+            </div>
+            <div class="mt-3">
+                <span class="text-info" id="winning-trades">
+                    <i class='bx bx-check'></i> {{ performance_stats.winning_trades }}/{{ performance_stats.total_trades }}
+                </span>
+                <small class="text-muted ms-2">Winning Trades</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Average Performance -->
+    <div class="col-md-3">
+        <div class="dashboard-card">
+            <h5><i class='bx bx-stats text-warning'></i> Averages</h5>
+            <div class="mt-3">
+                <h2 class="mb-0" id="avg-profit">{{ "%.2f"|format(performance_stats.average_profit) }}</h2>
+                <small class="text-muted">Average Profit/Trade</small>
+            </div>
+            <div class="mt-3">
+                <span class="text-success" id="avg-win">
+                    <i class='bx bx-trending-up'></i> {{ "%.2f"|format(performance_stats.average_win) }}
+                </span>
+                <small class="text-muted ms-2">Avg Win</small>
+                <span class="text-danger ms-3" id="avg-loss">
+                    <i class='bx bx-trending-down'></i> {{ "%.2f"|format(performance_stats.average_loss) }}
+                </span>
+                <small class="text-muted ms-2">Avg Loss</small>
+            </div>
+        </div>
+    </div>
+
+    <!-- Profit Factor -->
+    <div class="col-md-3">
+        <div class="dashboard-card">
+            <h5><i class='bx bx-calculator text-danger'></i> Risk Metrics</h5>
+            <div class="mt-3">
+                <h2 class="mb-0" id="profit-factor">{{ "%.2f"|format(performance_stats.profit_factor) }}</h2>
+                <small class="text-muted">Profit Factor</small>
+            </div>
+            <div class="mt-3">
+                <span class="text-success" id="largest-win">
+                    <i class='bx bx-upside-down'></i> {{ "%.2f"|format(performance_stats.largest_win) }}
+                </span>
+                <small class="text-muted ms-2">Best Trade</small>
+                <span class="text-danger ms-3" id="largest-loss">
+                    <i class='bx bx-down-arrow-alt'></i> {{ "%.2f"|format(performance_stats.largest_loss) }}
+                </span>
+                <small class="text-muted ms-2">Worst Trade</small>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Equity Curve and Drawdown -->
-<div class="row mt-4">
-    <div class="col-md-8">
-        <div class="dashboard-card">
-            <h5><i class='bx bx-trending-up text-success'></i> Equity Curve</h5>
-            <div id="equityChart" style="height: 400px;"></div>
-        </div>
-    </div>
-    <div class="col-md-4">
-        <div class="dashboard-card">
-            <h5><i class='bx bx-trending-down text-danger'></i> Drawdown Analysis</h5>
-            <div class="mt-4">
-                <div class="d-flex justify-content-between mb-3">
-                    <span>Maximum Drawdown</span>
-                    <span class="text-danger">{{ performance.max_drawdown }}%</span>
-                </div>
-                <div class="d-flex justify-content-between mb-3">
-                    <span>Average Drawdown</span>
-                    <span>{{ performance.avg_drawdown }}%</span>
-                </div>
-                <div class="d-flex justify-content-between mb-3">
-                    <span>Recovery Time</span>
-                    <span>{{ performance.recovery_time }}</span>
-                </div>
-                <div class="d-flex justify-content-between">
-                    <span>Current Drawdown</span>
-                    <span class="text-{{ 'danger' if performance.current_drawdown > 5 else 'warning' }}">
-                        {{ performance.current_drawdown }}%
-                    </span>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Trading Metrics -->
-<div class="row mt-4">
-    <div class="col-md-6">
-        <div class="dashboard-card">
-            <h5><i class='bx bx-stats text-info'></i> Trade Statistics</h5>
-            <div class="table-responsive mt-4">
-                <table class="table">
-                    <tbody>
-                        <tr>
-                            <td>Total Trades</td>
-                            <td class="text-end">{{ performance.total_trades }}</td>
-                        </tr>
-                        <tr>
-                            <td>Profitable Trades</td>
-                            <td class="text-end text-success">{{ performance.profitable_trades }}</td>
-                        </tr>
-                        <tr>
-                            <td>Loss-Making Trades</td>
-                            <td class="text-end text-danger">{{ performance.losing_trades }}</td>
-                        </tr>
-                        <tr>
-                            <td>Average Win</td>
-                            <td class="text-end text-success">{{ performance.avg_win }}</td>
-                        </tr>
-                        <tr>
-                            <td>Average Loss</td>
-                            <td class="text-end text-danger">{{ performance.avg_loss }}</td>
-                        </tr>
-                        <tr>
-                            <td>Largest Win</td>
-                            <td class="text-end text-success">{{ performance.largest_win }}</td>
-                        </tr>
-                        <tr>
-                            <td>Largest Loss</td>
-                            <td class="text-end text-danger">{{ performance.largest_loss }}</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-    <div class="col-md-6">
-        <div class="dashboard-card">
-            <h5><i class='bx bx-time text-warning'></i> Time Analysis</h5>
-            <div class="table-responsive mt-4">
-                <table class="table">
-                    <tbody>
-                        <tr>
-                            <td>Average Trade Duration</td>
-                            <td class="text-end">{{ performance.avg_duration }}</td>
-                        </tr>
-                        <tr>
-                            <td>Best Trading Day</td>
-                            <td class="text-end">{{ performance.best_day }}</td>
-                        </tr>
-                        <tr>
-                            <td>Worst Trading Day</td>
-                            <td class="text-end">{{ performance.worst_day }}</td>
-                        </tr>
-                        <tr>
-                            <td>Most Active Hours</td>
-                            <td class="text-end">{{ performance.active_hours }}</td>
-                        </tr>
-                        <tr>
-                            <td>Time Between Trades</td>
-                            <td class="text-end">{{ performance.time_between_trades }}</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Monthly Performance -->
+<!-- Daily Performance -->
 <div class="row mt-4">
     <div class="col-md-12">
         <div class="dashboard-card">
-            <h5><i class='bx bx-calendar text-primary'></i> Monthly Performance</h5>
-            <div class="table-responsive mt-4">
+            <h5>Daily Performance</h5>
+            <div class="table-responsive">
                 <table class="table">
                     <thead>
                         <tr>
-                            <th>Month</th>
-                            <th>Return</th>
-                            <th>Trades</th>
+                            <th>Date</th>
+                            <th>Total Trades</th>
                             <th>Win Rate</th>
-                            <th>Profit Factor</th>
-                            <th>Max Drawdown</th>
+                            <th>Profit/Loss</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        {% for month in performance.monthly_stats %}
+                    <tbody id="daily-performance">
+                        {% for day in daily_performance %}
                         <tr>
-                            <td>{{ month.month }}</td>
-                            <td class="text-{{ 'success' if month.return > 0 else 'danger' }}">
-                                {{ month.return }}%
+                            <td>{{ day.date.strftime('%Y-%m-%d') }}</td>
+                            <td>{{ day.trades }}</td>
+                            <td>{{ "%.1f"|format(day.win_rate) }}%</td>
+                            <td class="text-{{ 'success' if day.profit > 0 else 'danger' }}">
+                                {{ "%.2f"|format(day.profit) }}
                             </td>
-                            <td>{{ month.trades }}</td>
-                            <td>{{ month.win_rate }}%</td>
-                            <td>{{ month.profit_factor }}</td>
-                            <td class="text-danger">{{ month.max_drawdown }}%</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Trades -->
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="dashboard-card">
+            <h5>Recent Trades</h5>
+            <div class="table-responsive">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Symbol</th>
+                            <th>Side</th>
+                            <th>Entry Price</th>
+                            <th>Exit Price</th>
+                            <th>Quantity</th>
+                            <th>P/L</th>
+                        </tr>
+                    </thead>
+                    <tbody id="recent-trades">
+                        {% for trade in recent_trades %}
+                        <tr>
+                            <td>{{ trade.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                            <td>{{ trade.symbol }}</td>
+                            <td>
+                                <span class="badge bg-{{ 'success' if trade.side == 'BUY' else 'danger' }}">
+                                    {{ trade.side }}
+                                </span>
+                            </td>
+                            <td>{{ "%.2f"|format(trade.entry_price) }}</td>
+                            <td>{{ "%.2f"|format(trade.exit_price) }}</td>
+                            <td>{{ "%.4f"|format(trade.quantity) }}</td>
+                            <td class="text-{{ 'success' if trade.realized_pnl > 0 else 'danger' }}">
+                                {{ "%.2f"|format(trade.realized_pnl) }}
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -188,55 +162,111 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
 <script>
-    // Equity curve chart
-    const equityData = {
-        x: {{ performance.equity_curve.dates | tojson }},
-        y: {{ performance.equity_curve.values | tojson }},
-        type: 'scatter',
-        mode: 'lines',
-        name: 'Equity',
-        line: {
-            color: '#4723D9'
+    let reconnectAttempts = 0;
+    const maxReconnectAttempts = 5;
+    const reconnectDelay = 2000; // Start with 2 seconds
+    let ws;
+
+    function connectWebSocket() {
+        ws = new WebSocket(`ws://${window.location.host}/ws`);
+        
+        ws.addEventListener('open', function (event) {
+            console.log('Connected to WebSocket');
+            reconnectAttempts = 0; // Reset attempts on successful connection
+        });
+        
+        ws.addEventListener('message', function (event) {
+            const data = JSON.parse(event.data);
+            if (data.type === 'update') {
+                updatePerformanceStats(data.data.performance_stats);
+                updateRecentTrades(data.data.recent_trades);
+            }
+        });
+        
+        ws.addEventListener('close', function (event) {
+            console.log('Disconnected from WebSocket');
+            attemptReconnect();
+        });
+        
+        ws.addEventListener('error', function (event) {
+            console.error('WebSocket error:', event);
+        });
+    }
+
+    function attemptReconnect() {
+        if (reconnectAttempts < maxReconnectAttempts) {
+            const delay = reconnectDelay * Math.pow(2, reconnectAttempts);
+            console.log(`Attempting to reconnect in ${delay/1000} seconds...`);
+            setTimeout(() => {
+                reconnectAttempts++;
+                connectWebSocket();
+            }, delay);
+        } else {
+            console.log('Max reconnection attempts reached. Please refresh the page manually.');
         }
-    };
-
-    const drawdownData = {
-        x: {{ performance.drawdown_curve.dates | tojson }},
-        y: {{ performance.drawdown_curve.values | tojson }},
-        type: 'scatter',
-        mode: 'lines',
-        name: 'Drawdown',
-        line: {
-            color: '#dc3545'
-        },
-        yaxis: 'y2'
-    };
-
-    const layout = {
-        showlegend: true,
-        margin: { t: 20, l: 40, r: 40, b: 40 },
-        paper_bgcolor: 'rgba(0,0,0,0)',
-        plot_bgcolor: 'rgba(0,0,0,0)',
-        xaxis: {
-            showgrid: true,
-            gridcolor: '#f5f5f5'
-        },
-        yaxis: {
-            showgrid: true,
-            gridcolor: '#f5f5f5',
-            title: 'Equity'
-        },
-        yaxis2: {
-            showgrid: false,
-            title: 'Drawdown',
-            overlaying: 'y',
-            side: 'right',
-            range: [0, 100]
+    }
+    
+    // Initial connection
+    connectWebSocket();
+    
+    // Keep connection alive with ping
+    setInterval(function() {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'ping' }));
         }
-    };
-
-    Plotly.newPlot('equityChart', [equityData, drawdownData], layout);
+    }, 30000);
+    
+    function updatePerformanceStats(stats) {
+        // Update statistics
+        document.getElementById('total-trades').textContent = stats.total_trades;
+        document.getElementById('win-rate').textContent = stats.win_rate.toFixed(1) + '%';
+        document.getElementById('winning-trades').innerHTML = 
+            `<i class='bx bx-check'></i> ${stats.winning_trades}/${stats.total_trades}`;
+        
+        // Update profit displays
+        const totalProfitEl = document.getElementById('total-profit');
+        totalProfitEl.innerHTML = 
+            `<i class='bx bx-${stats.total_profit > 0 ? 'up' : 'down'}-arrow-alt'></i> ${stats.total_profit.toFixed(2)}`;
+        totalProfitEl.className = `text-${stats.total_profit > 0 ? 'success' : 'danger'}`;
+        
+        // Update averages
+        document.getElementById('avg-profit').textContent = stats.average_profit.toFixed(2);
+        document.getElementById('avg-win').textContent = stats.average_win.toFixed(2);
+        document.getElementById('avg-loss').textContent = stats.average_loss.toFixed(2);
+        
+        // Update risk metrics
+        document.getElementById('profit-factor').textContent = stats.profit_factor.toFixed(2);
+        document.getElementById('largest-win').textContent = stats.largest_win.toFixed(2);
+        document.getElementById('largest-loss').textContent = stats.largest_loss.toFixed(2);
+    }
+    
+    function updateRecentTrades(trades) {
+        const tbody = document.getElementById('recent-trades');
+        let html = '';
+        
+        trades.forEach(trade => {
+            const timestamp = new Date(trade.timestamp).toLocaleString();
+            html += `
+                <tr>
+                    <td>${timestamp}</td>
+                    <td>${trade.symbol}</td>
+                    <td>
+                        <span class="badge bg-${trade.side === 'BUY' ? 'success' : 'danger'}">
+                            ${trade.side}
+                        </span>
+                    </td>
+                    <td>${trade.entry_price.toFixed(2)}</td>
+                    <td>${trade.exit_price.toFixed(2)}</td>
+                    <td>${trade.quantity.toFixed(4)}</td>
+                    <td class="text-${trade.realized_pnl > 0 ? 'success' : 'danger'}">
+                        ${trade.realized_pnl.toFixed(2)}
+                    </td>
+                </tr>
+            `;
+        });
+        
+        tbody.innerHTML = html;
+    }
 </script>
 {% endblock %} 

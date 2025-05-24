@@ -42,7 +42,7 @@ DASHBOARD_HTML = """
 <head>
     <title>Trading Performance Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <script src="https://cdn.plot.ly/plotly-3.0.1.min.js"></script>
     <style>
         .chart-container {
             margin: 20px;

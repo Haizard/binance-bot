@@ -1,287 +1,179 @@
 {% extends "layouts/base.html" %}
 
-{% block title %}Trading Bot - Market Analysis{% endblock %}
+{% block title %}Trading Bot - Market Data{% endblock %}
 
-{% block header_text %}Market Analysis{% endblock %}
+{% block header_text %}Market Overview{% endblock %}
+
+{% block head %}
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% endblock %}
 
 {% block content %}
+<!-- Initialize chart functions -->
+<script>
+    let priceChart = null;
+
+    // Initialize chart with default data
+    function initChart(symbol, timeframe) {
+        const ctx = document.getElementById('priceChart').getContext('2d');
+        
+        if (priceChart) {
+            priceChart.destroy();
+        }
+
+        priceChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: `${symbol} Price`,
+                    data: [],
+                    borderColor: 'rgb(75, 192, 192)',
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: false
+                    }
+                }
+            }
+        });
+
+        // Load initial data
+        updateChartData(symbol, timeframe);
+    }
+
+    // Update chart with new data
+    async function updateChartData(symbol, timeframe) {
+        try {
+            const response = await fetch(`/api/market_data?symbol=${symbol}&timeframe=${timeframe}`);
+            const data = await response.json();
+
+            priceChart.data.labels = data.timestamps;
+            priceChart.data.datasets[0].data = data.prices;
+            priceChart.update();
+        } catch (error) {
+            console.error('Error fetching market data:', error);
+        }
+    }
+
+    // Show chart for selected symbol
+    function showChart(symbol) {
+        const timeframe = document.getElementById('timeframe-select').value;
+        document.getElementById('symbol-select').value = symbol;
+        initChart(symbol, timeframe);
+    }
+</script>
+
 <div class="row">
     <!-- Market Overview -->
-    <div class="col-md-12">
+    <div class="col-md-12 mb-4">
         <div class="dashboard-card">
-            <h5><i class='bx bx-globe text-primary'></i> Market Overview</h5>
-            <div class="row mt-4">
-                <div class="col-md-3">
-                    <div class="text-center">
-                        <h3 class="mb-0">{{ market_stats.total_volume }}</h3>
-                        <small class="text-muted">24h Volume</small>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="text-center">
-                        <h3 class="mb-0 text-{{ 'success' if market_stats.market_trend == 'Bullish' else 'danger' }}">
-                            {{ market_stats.market_trend }}
-                        </h3>
-                        <small class="text-muted">Market Trend</small>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="text-center">
-                        <h3 class="mb-0">{{ market_stats.active_pairs }}</h3>
-                        <small class="text-muted">Active Pairs</small>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="text-center">
-                        <h3 class="mb-0">{{ market_stats.volatility }}%</h3>
-                        <small class="text-muted">Market Volatility</small>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Price Charts -->
-<div class="row mt-4">
-    <div class="col-md-12">
-        <div class="dashboard-card">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <h5><i class='bx bx-line-chart text-success'></i> Price Analysis</h5>
-                <div>
-                    <select class="form-select form-select-sm d-inline-block w-auto me-2" id="tradingPair">
-                        {% for pair in trading_pairs %}
-                        <option value="{{ pair }}">{{ pair }}</option>
-                        {% endfor %}
-                    </select>
-                    <select class="form-select form-select-sm d-inline-block w-auto" id="timeframe">
-                        <option value="1m">1 minute</option>
-                        <option value="5m">5 minutes</option>
-                        <option value="15m">15 minutes</option>
-                        <option value="1h">1 hour</option>
-                        <option value="4h">4 hours</option>
-                        <option value="1d">1 day</option>
-                    </select>
-                </div>
-            </div>
-            <div id="priceChart" style="height: 400px;"></div>
-        </div>
-    </div>
-</div>
-
-<!-- Market Analysis -->
-<div class="row mt-4">
-    <div class="col-md-6">
-        <div class="dashboard-card">
-            <h5><i class='bx bx-bar-chart-alt-2 text-info'></i> Volume Analysis</h5>
-            <div id="volumeChart" style="height: 300px;"></div>
-        </div>
-    </div>
-    <div class="col-md-6">
-        <div class="dashboard-card">
-            <h5><i class='bx bx-trending-up text-warning'></i> Trend Analysis</h5>
-            <div id="trendChart" style="height: 300px;"></div>
-        </div>
-    </div>
-</div>
-
-<!-- Market Data -->
-<div class="row mt-4">
-    <div class="col-md-12">
-        <div class="dashboard-card">
-            <h5><i class='bx bx-table text-primary'></i> Market Data</h5>
-            <div class="table-responsive mt-4">
-                <table class="table">
+            <h5><i class='bx bx-line-chart-down text-primary'></i> Market Overview</h5>
+            <div class="table-responsive mt-3">
+                <table class="table table-hover">
                     <thead>
                         <tr>
-                            <th>Trading Pair</th>
+                            <th>Symbol</th>
                             <th>Price</th>
                             <th>24h Change</th>
-                            <th>24h High</th>
-                            <th>24h Low</th>
-                            <th>Volume</th>
-                            <th>Trend</th>
+                            <th>24h Volume</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {% for pair in market_data %}
+                        {% for symbol in symbols %}
+                        {% set price_data = latest_prices[symbol] %}
                         <tr>
-                            <td>{{ pair.symbol }}</td>
-                            <td>{{ pair.price }}</td>
-                            <td class="text-{{ 'success' if pair.change >= 0 else 'danger' }}">
-                                {{ pair.change }}%
+                            <td>{{ symbol }}</td>
+                            <td>${{ "%.2f"|format(price_data.price) }}</td>
+                            <td class="text-{{ 'success' if price_data.change > 0 else 'danger' }}">
+                                {{ "%.2f"|format(price_data.change) }}%
                             </td>
-                            <td>{{ pair.high }}</td>
-                            <td>{{ pair.low }}</td>
-                            <td>{{ pair.volume }}</td>
+                            <td>{{ "%.2f"|format(price_data.volume) }}</td>
                             <td>
-                                <span class="badge bg-{{ pair.trend_color }}">
-                                    {{ pair.trend }}
-                                </span>
+                                <button class="btn btn-sm btn-primary" onclick="showChart('{{ symbol }}')">
+                                    <i class='bx bx-chart'></i> Chart
+                                </button>
                             </td>
                         </tr>
                         {% endfor %}
+                        {% if not symbols %}
+                        <tr>
+                            <td colspan="5" class="text-center">No market data available</td>
+                        </tr>
+                        {% endif %}
                     </tbody>
                 </table>
             </div>
         </div>
     </div>
-</div>
 
-<!-- Technical Indicators -->
-<div class="row mt-4">
+    <!-- Price Chart -->
     <div class="col-md-12">
         <div class="dashboard-card">
-            <h5><i class='bx bx-analyse text-warning'></i> Technical Indicators</h5>
-            <div class="table-responsive mt-4">
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>Indicator</th>
-                            <th>Value</th>
-                            <th>Signal</th>
-                            <th>Updated</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for indicator in technical_indicators %}
-                        <tr>
-                            <td>{{ indicator.name }}</td>
-                            <td>{{ indicator.value }}</td>
-                            <td>
-                                <span class="badge bg-{{ indicator.signal_color }}">
-                                    {{ indicator.signal }}
-                                </span>
-                            </td>
-                            <td>{{ indicator.updated_at }}</td>
-                        </tr>
+            <div class="d-flex justify-content-between align-items-center">
+                <h5><i class='bx bx-chart text-info'></i> Price Chart</h5>
+                <div>
+                    <select id="timeframe-select" class="form-select form-select-sm d-inline-block w-auto me-2">
+                        {% for tf in timeframes %}
+                        <option value="{{ tf }}">{{ tf }}</option>
                         {% endfor %}
-                    </tbody>
-                </table>
+                    </select>
+                    <select id="symbol-select" class="form-select form-select-sm d-inline-block w-auto">
+                        {% for symbol in symbols %}
+                        <option value="{{ symbol }}">{{ symbol }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="mt-3">
+                <canvas id="priceChart"></canvas>
             </div>
         </div>
     </div>
 </div>
 {% endblock %}
 
-{% block extra_js %}
-<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+{% block scripts %}
 <script>
-// Price chart
-function updatePriceChart() {
-    const pair = document.getElementById('tradingPair').value;
-    const timeframe = document.getElementById('timeframe').value;
+    // Event listeners
+    document.getElementById('symbol-select').addEventListener('change', function() {
+        const symbol = this.value;
+        const timeframe = document.getElementById('timeframe-select').value;
+        initChart(symbol, timeframe);
+    });
+
+    document.getElementById('timeframe-select').addEventListener('change', function() {
+        const symbol = document.getElementById('symbol-select').value;
+        const timeframe = this.value;
+        initChart(symbol, timeframe);
+    });
+
+    // WebSocket connection for real-time updates
+    const ws = new WebSocket('ws://' + window.location.host + '/ws');
     
-    fetch(`/api/market/price?pair=${pair}&timeframe=${timeframe}`)
-        .then(response => response.json())
-        .then(data => {
-            const candlestick = {
-                x: data.timestamps,
-                open: data.open,
-                high: data.high,
-                low: data.low,
-                close: data.close,
-                type: 'candlestick',
-                name: pair
-            };
+    ws.onmessage = function(event) {
+        const data = JSON.parse(event.data);
+        if (data.type === 'market_update') {
+            const symbol = document.getElementById('symbol-select').value;
+            const timeframe = document.getElementById('timeframe-select').value;
+            updateChartData(symbol, timeframe);
+        }
+    };
 
-            const volume = {
-                x: data.timestamps,
-                y: data.volume,
-                type: 'bar',
-                name: 'Volume',
-                marker: {
-                    color: data.volume_colors
-                },
-                yaxis: 'y2'
-            };
-
-            const layout = {
-                dragmode: 'zoom',
-                showlegend: false,
-                margin: { t: 20, l: 40, r: 40, b: 40 },
-                paper_bgcolor: 'rgba(0,0,0,0)',
-                plot_bgcolor: 'rgba(0,0,0,0)',
-                xaxis: {
-                    rangeslider: { visible: false },
-                    showgrid: true,
-                    gridcolor: '#f5f5f5'
-                },
-                yaxis: {
-                    showgrid: true,
-                    gridcolor: '#f5f5f5'
-                },
-                yaxis2: {
-                    showgrid: false,
-                    overlaying: 'y',
-                    side: 'right'
-                }
-            };
-
-            Plotly.newPlot('priceChart', [candlestick, volume], layout);
-        });
-}
-
-// Volume analysis chart
-const volumeData = {
-    x: {{ volume_data.timestamps | tojson }},
-    y: {{ volume_data.values | tojson }},
-    type: 'bar',
-    marker: {
-        color: '#4723D9'
-    }
-};
-
-const volumeLayout = {
-    margin: { t: 20, l: 40, r: 40, b: 40 },
-    paper_bgcolor: 'rgba(0,0,0,0)',
-    plot_bgcolor: 'rgba(0,0,0,0)',
-    xaxis: {
-        showgrid: true,
-        gridcolor: '#f5f5f5'
-    },
-    yaxis: {
-        showgrid: true,
-        gridcolor: '#f5f5f5',
-        title: 'Volume'
-    }
-};
-
-Plotly.newPlot('volumeChart', [volumeData], volumeLayout);
-
-// Trend analysis chart
-const trendData = {
-    x: {{ trend_data.timestamps | tojson }},
-    y: {{ trend_data.values | tojson }},
-    type: 'scatter',
-    mode: 'lines',
-    line: {
-        color: '#4723D9'
-    }
-};
-
-const trendLayout = {
-    margin: { t: 20, l: 40, r: 40, b: 40 },
-    paper_bgcolor: 'rgba(0,0,0,0)',
-    plot_bgcolor: 'rgba(0,0,0,0)',
-    xaxis: {
-        showgrid: true,
-        gridcolor: '#f5f5f5'
-    },
-    yaxis: {
-        showgrid: true,
-        gridcolor: '#f5f5f5',
-        title: 'Trend Strength'
-    }
-};
-
-Plotly.newPlot('trendChart', [trendData], trendLayout);
-
-// Event listeners
-document.getElementById('tradingPair').addEventListener('change', updatePriceChart);
-document.getElementById('timeframe').addEventListener('change', updatePriceChart);
-
-// Initial chart load
-updatePriceChart();
+    // Initialize chart with first symbol and timeframe
+    document.addEventListener('DOMContentLoaded', function() {
+        if (document.getElementById('symbol-select').options.length > 0) {
+            const symbol = document.getElementById('symbol-select').value;
+            const timeframe = document.getElementById('timeframe-select').value;
+            initChart(symbol, timeframe);
+        }
+    });
 </script>
 {% endblock %} 

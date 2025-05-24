@@ -2,123 +2,99 @@
 
 {% block title %}Trading Bot - Dashboard{% endblock %}
 
-{% block header_text %}Overview Dashboard{% endblock %}
+{% block header_text %}Trading Bot Dashboard{% endblock %}
 
 {% block content %}
 <div class="row">
-    <!-- Trading Summary -->
+    <!-- Performance Stats -->
     <div class="col-md-3">
         <div class="dashboard-card">
-            <h5><i class='bx bx-line-chart text-primary'></i> Trading</h5>
+            <h5><i class='bx bx-line-chart text-primary'></i> Performance</h5>
             <div class="mt-3">
-                <h2 class="mb-0">{{ trading_stats.total_trades }}</h2>
+                <h2 class="mb-0" id="total-trades">{{ performance_stats.total_trades }}</h2>
                 <small class="text-muted">Total Trades</small>
             </div>
             <div class="mt-3">
-                <span class="text-success">
-                    <i class='bx bx-up-arrow-alt'></i> {{ trading_stats.profit_percentage }}%
+                <span class="text-{{ 'success' if performance_stats.total_profit > 0 else 'danger' }}" id="total-profit">
+                    <i class='bx bx-{{ 'up' if performance_stats.total_profit > 0 else 'down' }}-arrow-alt'></i> 
+                    ${{ "%.2f"|format(performance_stats.total_profit) }}
                 </span>
-                <small class="text-muted ms-2">Profit</small>
+                <br>
+                <small class="text-muted">Total Profit</small>
             </div>
-        </div>
-    </div>
-
-    <!-- Performance Metrics -->
-    <div class="col-md-3">
-        <div class="dashboard-card">
-            <h5><i class='bx bx-bar-chart-alt-2 text-success'></i> Performance</h5>
             <div class="mt-3">
-                <h2 class="mb-0">{{ performance_stats.win_rate }}%</h2>
+                <h4 class="mb-0" id="win-rate">{{ "%.1f"|format(performance_stats.win_rate) }}%</h4>
                 <small class="text-muted">Win Rate</small>
             </div>
-            <div class="mt-3">
-                <span class="text-info">
-                    <i class='bx bx-time'></i> {{ performance_stats.avg_trade_duration }}
-                </span>
-                <small class="text-muted ms-2">Avg Duration</small>
-            </div>
         </div>
     </div>
 
-    <!-- Active Alerts -->
-    <div class="col-md-3">
+    <!-- Active Trades -->
+    <div class="col-md-9">
         <div class="dashboard-card">
-            <h5><i class='bx bx-bell text-warning'></i> Alerts</h5>
-            <div class="mt-3">
-                <h2 class="mb-0">{{ alert_stats.active_alerts }}</h2>
-                <small class="text-muted">Active Alerts</small>
-            </div>
-            <div class="mt-3">
-                <span class="text-warning">
-                    <i class='bx bx-bell'></i> {{ alert_stats.triggered_today }}
-                </span>
-                <small class="text-muted ms-2">Triggered Today</small>
-            </div>
-        </div>
-    </div>
-
-    <!-- Market Overview -->
-    <div class="col-md-3">
-        <div class="dashboard-card">
-            <h5><i class='bx bx-trending-up text-danger'></i> Market</h5>
-            <div class="mt-3">
-                <h2 class="mb-0">{{ market_stats.active_pairs }}</h2>
-                <small class="text-muted">Active Pairs</small>
-            </div>
-            <div class="mt-3">
-                <span class="text-danger">
-                    <i class='bx bx-trending-up'></i> {{ market_stats.market_trend }}
-                </span>
-                <small class="text-muted ms-2">Trend</small>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Charts Row -->
-<div class="row mt-4">
-    <div class="col-md-6">
-        <div class="dashboard-card">
-            <h5>Profit/Loss Timeline</h5>
-            <div id="profitChart" style="height: 300px;"></div>
-        </div>
-    </div>
-    <div class="col-md-6">
-        <div class="dashboard-card">
-            <h5>Trading Volume</h5>
-            <div id="volumeChart" style="height: 300px;"></div>
-        </div>
-    </div>
-</div>
-
-<!-- Recent Activity -->
-<div class="row mt-4">
-    <div class="col-md-12">
-        <div class="dashboard-card">
-            <h5>Recent Activity</h5>
+            <h5><i class='bx bx-trending-up text-warning'></i> Active Trades</h5>
             <div class="table-responsive">
-                <table class="table">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Symbol</th>
+                            <th>Type</th>
+                            <th>Entry Price</th>
+                            <th>Current Price</th>
+                            <th>Unrealized PnL</th>
+                            <th>Duration</th>
+                        </tr>
+                    </thead>
+                    <tbody id="active-trades">
+                        {% for trade in active_trades %}
+                        <tr>
+                            <td>{{ trade.symbol }}</td>
+                            <td>{{ trade.type }}</td>
+                            <td>${{ "%.2f"|format(trade.entry_price) }}</td>
+                            <td>${{ "%.2f"|format(trade.current_price) }}</td>
+                            <td class="text-{{ 'success' if trade.unrealized_pnl > 0 else 'danger' }}">
+                                ${{ "%.2f"|format(trade.unrealized_pnl) }}
+                            </td>
+                            <td>{{ trade.duration }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Trades -->
+<div class="row mt-4">
+    <div class="col-12">
+        <div class="dashboard-card">
+            <h5><i class='bx bx-history text-info'></i> Recent Trades</h5>
+            <div class="table-responsive">
+                <table class="table table-hover">
                     <thead>
                         <tr>
                             <th>Time</th>
+                            <th>Symbol</th>
                             <th>Type</th>
-                            <th>Pair</th>
-                            <th>Price</th>
-                            <th>Status</th>
+                            <th>Entry Price</th>
+                            <th>Exit Price</th>
+                            <th>PnL</th>
+                            <th>Duration</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        {% for activity in recent_activities %}
+                    <tbody id="recent-trades">
+                        {% for trade in recent_trades %}
                         <tr>
-                            <td>{{ activity.time }}</td>
-                            <td>{{ activity.type }}</td>
-                            <td>{{ activity.pair }}</td>
-                            <td>{{ activity.price }}</td>
-                            <td>
-                                <span class="badge bg-{{ activity.status_color }}">
-                                    {{ activity.status }}
-                                </span>
+                            <td>{{ trade.timestamp }}</td>
+                            <td>{{ trade.symbol }}</td>
+                            <td>{{ trade.type }}</td>
+                            <td>${{ "%.2f"|format(trade.entry_price) }}</td>
+                            <td>${{ "%.2f"|format(trade.exit_price) }}</td>
+                            <td class="text-{{ 'success' if trade.realized_pnl > 0 else 'danger' }}">
+                                ${{ "%.2f"|format(trade.realized_pnl) }}
                             </td>
+                            <td>{{ trade.duration }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -129,47 +105,106 @@
 </div>
 {% endblock %}
 
-{% block extra_js %}
-<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+{% block scripts %}
 <script>
-    // Sample data for charts
-    const profitData = {
-        x: {{ profit_chart_data.dates | tojson }},
-        y: {{ profit_chart_data.values | tojson }},
-        type: 'scatter',
-        mode: 'lines',
-        name: 'Profit/Loss',
-        line: {
-            color: '#4723D9'
-        }
-    };
+    // WebSocket connection with auto-reconnect
+    function connectWebSocket() {
+        const ws = new WebSocket('ws://' + window.location.host + '/ws');
+        let pingInterval;
+        let reconnectTimeout;
 
-    const volumeData = {
-        x: {{ volume_chart_data.dates | tojson }},
-        y: {{ volume_chart_data.values | tojson }},
-        type: 'bar',
-        name: 'Volume',
-        marker: {
-            color: '#AFA5D9'
-        }
-    };
+        ws.onopen = function() {
+            console.log('WebSocket connected');
+            // Send ping every 30 seconds
+            pingInterval = setInterval(() => {
+                if (ws.readyState === WebSocket.OPEN) {
+                    ws.send(JSON.stringify({type: 'ping'}));
+                }
+            }, 30000);
+        };
 
-    const layout = {
-        showlegend: false,
-        margin: { t: 20, l: 40, r: 20, b: 40 },
-        paper_bgcolor: 'rgba(0,0,0,0)',
-        plot_bgcolor: 'rgba(0,0,0,0)',
-        xaxis: {
-            showgrid: true,
-            gridcolor: '#f5f5f5'
-        },
-        yaxis: {
-            showgrid: true,
-            gridcolor: '#f5f5f5'
-        }
-    };
+        ws.onclose = function() {
+            console.log('WebSocket disconnected');
+            clearInterval(pingInterval);
+            // Try to reconnect after 5 seconds
+            reconnectTimeout = setTimeout(connectWebSocket, 5000);
+        };
 
-    Plotly.newPlot('profitChart', [profitData], layout);
-    Plotly.newPlot('volumeChart', [volumeData], layout);
+        ws.onerror = function(error) {
+            console.error('WebSocket error:', error);
+        };
+
+        ws.onmessage = function(event) {
+            try {
+                const data = JSON.parse(event.data);
+                
+                if (data.type === 'pong') {
+                    return; // Ignore pong responses
+                }
+                
+                if (data.type === 'update') {
+                    updateDashboard(data.data);
+                }
+            } catch (error) {
+                console.error('Error processing message:', error);
+            }
+        };
+
+        // Clean up on page unload
+        window.onbeforeunload = function() {
+            clearInterval(pingInterval);
+            clearTimeout(reconnectTimeout);
+            ws.close();
+        };
+    }
+
+    // Update dashboard with new data
+    function updateDashboard(data) {
+        // Update performance stats
+        const stats = data.performance_stats;
+        document.getElementById('total-trades').textContent = stats.total_trades;
+        document.getElementById('win-rate').textContent = stats.win_rate.toFixed(1) + '%';
+        
+        const profitEl = document.getElementById('total-profit');
+        profitEl.innerHTML = `
+            <i class='bx bx-${stats.total_profit > 0 ? 'up' : 'down'}-arrow-alt'></i>
+            $${stats.total_profit.toFixed(2)}
+        `;
+        profitEl.className = `text-${stats.total_profit > 0 ? 'success' : 'danger'}`;
+
+        // Update active trades
+        const activeTrades = document.getElementById('active-trades');
+        activeTrades.innerHTML = data.active_trades.map(trade => `
+            <tr>
+                <td>${trade.symbol}</td>
+                <td>${trade.type}</td>
+                <td>$${trade.entry_price.toFixed(2)}</td>
+                <td>$${trade.current_price.toFixed(2)}</td>
+                <td class="text-${trade.unrealized_pnl > 0 ? 'success' : 'danger'}">
+                    $${trade.unrealized_pnl.toFixed(2)}
+                </td>
+                <td>${trade.duration}</td>
+            </tr>
+        `).join('');
+
+        // Update recent trades
+        const recentTrades = document.getElementById('recent-trades');
+        recentTrades.innerHTML = data.recent_trades.map(trade => `
+            <tr>
+                <td>${new Date(trade.timestamp).toLocaleString()}</td>
+                <td>${trade.symbol}</td>
+                <td>${trade.type}</td>
+                <td>$${trade.entry_price.toFixed(2)}</td>
+                <td>$${trade.exit_price.toFixed(2)}</td>
+                <td class="text-${trade.realized_pnl > 0 ? 'success' : 'danger'}">
+                    $${trade.realized_pnl.toFixed(2)}
+                </td>
+                <td>${trade.duration}</td>
+            </tr>
+        `).join('');
+    }
+
+    // Start WebSocket connection when page loads
+    document.addEventListener('DOMContentLoaded', connectWebSocket);
 </script>
 {% endblock %} 

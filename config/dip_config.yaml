@@ -1,0 +1,65 @@
+# Dip Execution Configuration
+
+dip_config:
+  # Minimum percentage drop from recent high to consider as a dip
+  min_dip_percent: 2.0
+  
+  # Minimum percentage recovery from the bottom to confirm dip
+  recovery_percent: 0.5
+  
+  # Required volume increase during dip compared to average
+  volume_increase_factor: 1.5
+  
+  # Maximum position size as fraction of account balance
+  max_position_size: 0.1
+  
+  # Hours of price history to consider for dip detection
+  price_window: 24
+  
+  # Hours to wait after executing a dip trade before trading again
+  cooldown_period: 4
+  
+  # Trading pairs enabled for dip detection
+  enabled_pairs:
+    - BTCUSDT
+    - ETHUSDT
+    - BNBUSDT
+    
+  # Risk management settings
+  risk_settings:
+    # Stop loss percentage for dip trades
+    stop_loss_percent: 2.0
+    
+    # Take profit percentage for dip trades
+    take_profit_percent: 4.0
+    
+    # Maximum number of concurrent dip positions
+    max_concurrent_positions: 3
+    
+    # Maximum total exposure across all dip positions
+    max_total_exposure: 0.3  # 30% of account
+    
+  # Advanced settings
+  advanced:
+    # Minimum volume in USDT for considering a dip
+    min_volume_usdt: 100000
+    
+    # Minimum number of candles showing recovery
+    min_recovery_candles: 2
+    
+    # Maximum time to wait for recovery confirmation (minutes)
+    max_recovery_wait: 30
+    
+    # Price momentum threshold for recovery confirmation
+    momentum_threshold: 0.2
+    
+  # Notification settings
+  notifications:
+    # Enable Telegram notifications for dip trades
+    telegram_enabled: true
+    
+    # Enable Discord notifications for dip trades
+    discord_enabled: true
+    
+    # Minimum dip percentage for notification
+    notify_min_dip: 3.0 

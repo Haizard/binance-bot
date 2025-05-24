@@ -329,7 +329,7 @@ class PerformanceReporter:
             {
                 'name': 'Total P&L',
                 'value': sum(t.get('pnl', 0) for t in period_trades),
-                'formatted_value': f"${sum(t.get('pnl', 0):,.2f)}",
+                'formatted_value': f"${sum(t.get('pnl', 0) for t in period_trades):,.2f}",
                 'is_monetary': True
             },
             {

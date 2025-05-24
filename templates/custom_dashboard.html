@@ -1,0 +1,240 @@
+{% extends "layouts/base.html" %}
+
+{% block title %}Trading Bot - Data Dashboard{% endblock %}
+
+{% block header_text %}Data Dashboard{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Symbol and Timeframe Selector -->
+    <div class="col-md-12 mb-4">
+        <div class="dashboard-card">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="input-group">
+                        <span class="input-group-text">Symbol</span>
+                        <select id="symbol-select" class="form-select">
+                            <option value="BTCUSDT">BTCUSDT</option>
+                            <option value="ETHUSDT">ETHUSDT</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="input-group">
+                        <span class="input-group-text">Timeframe</span>
+                        <select id="timeframe-select" class="form-select">
+                            <option value="1m">1 Minute</option>
+                            <option value="5m">5 Minutes</option>
+                            <option value="15m">15 Minutes</option>
+                            <option value="1h">1 Hour</option>
+                            <option value="4h">4 Hours</option>
+                            <option value="1d">1 Day</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts -->
+<div class="row">
+    <div class="col-md-12">
+        <div class="dashboard-card">
+            <h5>Price Chart</h5>
+            <div id="price-chart" style="height: 400px;">
+                <div class="d-flex justify-content-center align-items-center h-100">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="dashboard-card">
+            <h5>Volume Chart</h5>
+            <div id="volume-chart" style="height: 300px;">
+                <div class="d-flex justify-content-center align-items-center h-100">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mt-4">
+    <div class="col-md-12">
+        <div class="dashboard-card">
+            <h5>Latest Trades</h5>
+            <div class="table-responsive">
+                <table class="table" id="trades-table">
+                    <thead>
+                        <tr>
+                            <th>Time</th>
+                            <th>Price</th>
+                            <th>Quantity</th>
+                            <th>Side</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td colspan="4" class="text-center">Loading trades...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Plotly.js -->
+<script src="https://cdn.plot.ly/plotly-3.0.1.min.js"></script>
+
+<script>
+    // WebSocket connection handling
+    let ws;
+    let reconnectAttempts = 0;
+    const maxReconnectAttempts = 5;
+    const reconnectDelay = 2000; // Start with 2 seconds
+    
+    // Current selection
+    let currentSymbol = 'BTCUSDT';
+    let currentTimeframe = '1m';
+    
+    // DOM elements
+    const symbolSelect = document.getElementById('symbol-select');
+    const timeframeSelect = document.getElementById('timeframe-select');
+    const priceChartDiv = document.getElementById('price-chart');
+    const volumeChartDiv = document.getElementById('volume-chart');
+    const tradesTableBody = document.querySelector('#trades-table tbody');
+    
+    function connectWebSocket() {
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${wsProtocol}//${window.location.host}/ws`;
+        
+        ws = new WebSocket(wsUrl);
+        
+        ws.onopen = function() {
+            console.log('WebSocket connection established');
+            reconnectAttempts = 0; // Reset attempts on successful connection
+            requestData(); // Request initial data once connected
+        };
+        
+        ws.onclose = function() {
+            console.log('WebSocket connection closed');
+            if (reconnectAttempts < maxReconnectAttempts) {
+                setTimeout(function() {
+                    reconnectAttempts++;
+                    console.log(`Attempting to reconnect (${reconnectAttempts}/${maxReconnectAttempts})`);
+                    connectWebSocket();
+                }, reconnectDelay * Math.pow(2, reconnectAttempts - 1)); // Exponential backoff
+            } else {
+                console.error('Max reconnection attempts reached');
+            }
+        };
+        
+        ws.onerror = function(error) {
+            console.error('WebSocket error:', error);
+        };
+        
+        ws.onmessage = function(event) {
+            try {
+                const data = JSON.parse(event.data);
+                
+                if (data.type === 'charts' && data.symbol === currentSymbol && data.timeframe === currentTimeframe) {
+                    // Update charts
+                    if (data.charts.price_chart) {
+                        Plotly.newPlot('price-chart', data.charts.price_chart.data, data.charts.price_chart.layout);
+                    }
+                    
+                    if (data.charts.volume_chart) {
+                        Plotly.newPlot('volume-chart', data.charts.volume_chart.data, data.charts.volume_chart.layout);
+                    }
+                }
+            } catch (error) {
+                console.error('Error processing WebSocket message:', error);
+            }
+        };
+    }
+    
+    // Event listeners
+    symbolSelect.addEventListener('change', function() {
+        currentSymbol = this.value;
+        updateCharts();
+    });
+    
+    timeframeSelect.addEventListener('change', function() {
+        currentTimeframe = this.value;
+        updateCharts();
+    });
+    
+    function updateCharts() {
+        // Show loading spinners
+        priceChartDiv.innerHTML = '<div class="d-flex justify-content-center align-items-center h-100"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+        volumeChartDiv.innerHTML = '<div class="d-flex justify-content-center align-items-center h-100"><div class="spinner-border text-primary" role="status"><span class="visually-hidden">Loading...</span></div></div>';
+        tradesTableBody.innerHTML = '<tr><td colspan="4" class="text-center">Loading trades...</td></tr>';
+        
+        // Request new data via HTTP
+        fetch(`/data/${currentSymbol}/${currentTimeframe}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.price_chart) {
+                    const chartData = JSON.parse(data.price_chart);
+                    Plotly.newPlot('price-chart', chartData.data, chartData.layout);
+                }
+                
+                if (data.volume_chart) {
+                    const chartData = JSON.parse(data.volume_chart);
+                    Plotly.newPlot('volume-chart', chartData.data, chartData.layout);
+                }
+                
+                // Also request data via WebSocket for real-time updates
+                requestData();
+            })
+            .catch(error => {
+                console.error('Error fetching data:', error);
+                priceChartDiv.innerHTML = `<div class="alert alert-danger">Error loading chart: ${error.message}</div>`;
+                volumeChartDiv.innerHTML = `<div class="alert alert-danger">Error loading chart: ${error.message}</div>`;
+            });
+    }
+    
+    function requestData() {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({
+                type: 'getData',
+                symbol: currentSymbol,
+                timeframe: currentTimeframe
+            }));
+        }
+    }
+    
+    // Initialize the dashboard
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initial connection
+        connectWebSocket();
+        
+        // Initial chart load
+        updateCharts();
+        
+        // Auto-refresh data every 30 seconds
+        setInterval(function() {
+            if (ws.readyState === WebSocket.OPEN) {
+                requestData();
+            }
+        }, 30000);
+    });
+</script>
+{% endblock %}

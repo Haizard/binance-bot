@@ -9,6 +9,8 @@ import asyncio
 import argparse
 from typing import List
 from agents import BaseAgent, MessageBroker, ConfigAgent, DataAgent, AnalysisAgent, TradeAgent, PerformanceAgent
+import traceback
+import signal
 
 # Set up logging
 logging.basicConfig(
@@ -66,7 +68,7 @@ class TradingBotOrchestrator:
             logger.info("All agents initialized")
 
         except Exception as e:
-            logger.error(f"Error initializing trading bot: {str(e)}")
+            logger.error(f"Error initializing trading bot: {str(e)}\n{traceback.format_exc()}")
             raise
 
     async def start(self) -> None:
@@ -89,7 +91,7 @@ class TradingBotOrchestrator:
             await asyncio.gather(*agent_tasks)
 
         except Exception as e:
-            logger.error(f"Error running trading bot: {str(e)}")
+            logger.error(f"Error running trading bot: {str(e)}\n{traceback.format_exc()}")
             raise
         finally:
             self.running = False
@@ -130,12 +132,10 @@ async def main() -> None:
         def signal_handler():
             asyncio.create_task(bot.stop())
 
-        # Register signal handlers
-        for signal in [2, 15]:  # SIGINT, SIGTERM
-            asyncio.get_event_loop().add_signal_handler(
-                signal,
-                signal_handler
-            )
+        # Register signal handlers only if not on Windows
+        if sys.platform != "win32":
+            for sig in [signal.SIGINT, signal.SIGTERM]:
+                asyncio.get_event_loop().add_signal_handler(sig, signal_handler)
 
         # Start the bot
         await bot.start()
@@ -143,7 +143,7 @@ async def main() -> None:
     except KeyboardInterrupt:
         logger.info("Received shutdown signal")
     except Exception as e:
-        logger.error(f"Fatal error: {str(e)}")
+        logger.error(f"Fatal error: {str(e)}\n{traceback.format_exc()}")
     finally:
         # Ensure cleanup
         await bot.stop()
