@@ -8,6 +8,8 @@ from typing import Any, Dict, Optional, List
 from datetime import datetime, timedelta
 from .base_agent import BaseAgent
 from custom.strategy_factory import StrategyFactory
+from status_manager import StatusManager
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +45,25 @@ class AnalysisAgent(BaseAgent):
             'include_keys': False
         })
         
+        StatusManager().update("Analysis", {"message": "Setup completed, waiting for data"})
         logger.info("AnalysisAgent setup completed")
+        # Start heartbeat
+        asyncio.create_task(self._heartbeat())
+
+    async def _heartbeat(self):
+        while True:
+            # Show which symbols are being analyzed and last signal if available
+            symbol_status = []
+            for symbol in self.active_symbols:
+                last = self.data_cache.get(symbol, [])
+                if last:
+                    last_data = last[-1]
+                    symbol_status.append(f"{symbol}")
+            msg = "AnalysisAgent alive"
+            if symbol_status:
+                msg += " | Analyzing: " + ", ".join(symbol_status)
+            StatusManager().update("Analysis", {"message": msg})
+            await asyncio.sleep(5)
 
     async def cleanup(self) -> None:
         """Clean up the analysis agent."""
@@ -87,12 +107,13 @@ class AnalysisAgent(BaseAgent):
             # Update strategies based on configuration
             await self._update_strategies()
         
-        # Handle trading pair updates
-        trading_config = config.get('Trading', {})
+        # Handle trading pair updates - iterate through symbols list
+        trading_config = config.get('Trading', {}) or config.get('trading', {})
         if trading_config:
-            symbol = trading_config.get('symbol')
-            if symbol and symbol not in self.active_symbols:
-                await self._subscribe_to_symbol(symbol)
+            symbols = trading_config.get('symbols', [])
+            for symbol in symbols:
+                if symbol and symbol not in self.active_symbols:
+                    await self._subscribe_to_symbol(symbol)
 
     async def _handle_market_data_update(self, symbol: str, data: Dict[str, Any]) -> None:
         """
@@ -106,11 +127,13 @@ class AnalysisAgent(BaseAgent):
             return
             
         try:
+            StatusManager().update("Analysis", {"message": f"Analyzing {symbol} market data..."})
             # Update data cache
             if symbol not in self.data_cache:
                 self.data_cache[symbol] = []
             
             self.data_cache[symbol].append(data)
+            logger.debug(f"[AnalysisAgent] Added data for {symbol}. Cache size: {len(self.data_cache[symbol])}")
             
             # Maintain cache size
             max_cache_size = self.analysis_config.get('max_cache_size', 100)
@@ -120,14 +143,25 @@ class AnalysisAgent(BaseAgent):
             # Perform analysis
             analysis_result = await self._analyze_market_data(symbol)
             if analysis_result:
+                # Show strategies and signals
+                strategies = analysis_result.get('strategy_signals', [])
+                strat_msgs = []
+                for strat in strategies:
+                    strat_msgs.append(f"{strat['strategy']}: {strat['signal']}")
+                strat_msg = ", ".join(strat_msgs)
+                StatusManager().update("Analysis", {"message": f"Signal: {analysis_result['combined_signal']['signal']} for {symbol} | {strat_msg}"})
+                logger.info(f"[AnalysisAgent] Generated signal for {symbol}: {analysis_result['combined_signal']['signal']}")
+                logger.debug(f"[AnalysisAgent] Strategy signals for {symbol}: {strat_msg}")
                 # Broadcast analysis results
                 await self.send_message(f"analysis.update.{symbol}", {
                     'symbol': symbol,
                     'timestamp': datetime.now().isoformat(),
                     'analysis': analysis_result
                 })
+                StatusManager().update("Analysis", {"message": f"Analysis done for {symbol} | {strat_msg}"})
                 
         except Exception as e:
+            StatusManager().update("Analysis", {"message": f"Error analyzing {symbol}: {str(e)}"})
             logger.error(f"Error processing market data for {symbol}: {str(e)}")
 
     async def _handle_historical_data(self, data: Dict[str, Any]) -> None:
@@ -141,9 +175,14 @@ class AnalysisAgent(BaseAgent):
         try:
             # Convert to DataFrame for analysis
             df = pd.DataFrame(historical_data)
+            logger.debug(f"[AnalysisAgent] Received historical data for {symbol}. Rows: {len(df)}")
             
             # Perform historical analysis
             analysis_result = await self._analyze_historical_data(symbol, df)
+            if analysis_result:
+                logger.info(f"[AnalysisAgent] Analyzed historical data for {symbol}.")
+            else:
+                logger.warning(f"[AnalysisAgent] Historical data analysis for {symbol} returned no result.")
             
             # Broadcast historical analysis results
             await self.send_message(f"analysis.historical.{symbol}", {
@@ -204,12 +243,15 @@ class AnalysisAgent(BaseAgent):
                         'weight': config.get('weight', 1.0),
                         'enabled': config.get('enabled', True)
                     }
+                    StatusManager().update("Analysis", {"message": f"Initialized strategy: {strategy_name}"})
                     logger.info(f"Initialized strategy: {strategy_name}")
                     
                 except Exception as e:
+                    StatusManager().update("Analysis", {"message": f"Error initializing strategy {strategy_name}: {str(e)}"})
                     logger.error(f"Error initializing strategy {strategy_name}: {str(e)}")
                     
         except Exception as e:
+            StatusManager().update("Analysis", {"message": f"Error updating strategies: {str(e)}"})
             logger.error(f"Error updating strategies: {str(e)}")
 
     async def _analyze_market_data(self, symbol: str) -> Dict[str, Any]:

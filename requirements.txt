@@ -42,7 +42,7 @@ pyyaml==6.0.1
 
 # CLI Tools
 click==8.1.7
-rich==13.7.0
+
 typer==0.9.0  # Alternative to Click for more complex CLIs
 
 # Reporting

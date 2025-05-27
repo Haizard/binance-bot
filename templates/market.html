@@ -1,179 +1,321 @@
 {% extends "layouts/base.html" %}
 
-{% block title %}Trading Bot - Market Data{% endblock %}
+{% block title %}Trading Bot - Market Overview{% endblock %}
 
 {% block header_text %}Market Overview{% endblock %}
 
-{% block head %}
-<!-- Chart.js -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% block extra_css %}
+<link href="https://cdn.jsdelivr.net/npm/tradingview-widget/dist/tradingview-widget.css" rel="stylesheet">
 {% endblock %}
 
 {% block content %}
-<!-- Initialize chart functions -->
-<script>
-    let priceChart = null;
+<!-- Market Stats Cards -->
+<div class="row g-3 mb-4">
+    <!-- Total Volume -->
+    <div class="col-12 col-sm-6 col-xl-3">
+        <div class="stat-card h-100" style="border-left-color: var(--primary-color);">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="text-muted">24h Volume</div>
+                <i class='bx bx-transfer-alt fs-4 text-primary'></i>
+            </div>
+            <h3 class="mb-0">{{ market_stats.total_volume }}</h3>
+            <div class="mt-2 small">
+                <span class="text-{{ 'success' if market_stats.volume_change > 0 else 'danger' }}">
+                    <i class='bx bx-{{ 'up' if market_stats.volume_change > 0 else 'down' }}-arrow-alt'></i>
+                    {{ "%.1f"|format(market_stats.volume_change) }}%
+                </span>
+                <span class="text-muted ms-1">vs yesterday</span>
+            </div>
+        </div>
+    </div>
 
-    // Initialize chart with default data
-    function initChart(symbol, timeframe) {
-        const ctx = document.getElementById('priceChart').getContext('2d');
-        
-        if (priceChart) {
-            priceChart.destroy();
-        }
+    <!-- Market Trend -->
+    <div class="col-12 col-sm-6 col-xl-3">
+        <div class="stat-card h-100" style="border-left-color: var(--success-color);">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="text-muted">Market Trend</div>
+                <i class='bx bx-trending-up fs-4 text-success'></i>
+            </div>
+            <h3 class="mb-0">{{ market_stats.market_trend }}</h3>
+            <div class="mt-2 small text-muted">
+                Based on 24h price action
+            </div>
+        </div>
+    </div>
 
-        priceChart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: [],
-                datasets: [{
-                    label: `${symbol} Price`,
-                    data: [],
-                    borderColor: 'rgb(75, 192, 192)',
-                    tension: 0.1
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: {
-                        beginAtZero: false
-                    }
-                }
-            }
-        });
+    <!-- Active Pairs -->
+    <div class="col-12 col-sm-6 col-xl-3">
+        <div class="stat-card h-100" style="border-left-color: var(--warning-color);">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="text-muted">Active Pairs</div>
+                <i class='bx bx-coin-stack fs-4 text-warning'></i>
+            </div>
+            <h3 class="mb-0">{{ market_stats.active_pairs }}</h3>
+            <div class="mt-2 small text-muted">
+                Trading pairs monitored
+            </div>
+        </div>
+    </div>
 
-        // Load initial data
-        updateChartData(symbol, timeframe);
-    }
+    <!-- Volatility -->
+    <div class="col-12 col-sm-6 col-xl-3">
+        <div class="stat-card h-100" style="border-left-color: var(--info-color);">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="text-muted">Volatility</div>
+                <i class='bx bx-chart fs-4 text-info'></i>
+            </div>
+            <h3 class="mb-0">{{ "%.1f"|format(market_stats.volatility) }}%</h3>
+            <div class="mt-2 small text-muted">
+                24h price volatility
+            </div>
+        </div>
+    </div>
+</div>
 
-    // Update chart with new data
-    async function updateChartData(symbol, timeframe) {
-        try {
-            const response = await fetch(`/api/market_data?symbol=${symbol}&timeframe=${timeframe}`);
-            const data = await response.json();
-
-            priceChart.data.labels = data.timestamps;
-            priceChart.data.datasets[0].data = data.prices;
-            priceChart.update();
-        } catch (error) {
-            console.error('Error fetching market data:', error);
-        }
-    }
-
-    // Show chart for selected symbol
-    function showChart(symbol) {
-        const timeframe = document.getElementById('timeframe-select').value;
-        document.getElementById('symbol-select').value = symbol;
-        initChart(symbol, timeframe);
-    }
-</script>
-
-<div class="row">
-    <!-- Market Overview -->
-    <div class="col-md-12 mb-4">
+<!-- Market Chart Section -->
+<div class="row mb-4">
+    <div class="col-12">
         <div class="dashboard-card">
-            <h5><i class='bx bx-line-chart-down text-primary'></i> Market Overview</h5>
-            <div class="table-responsive mt-3">
-                <table class="table table-hover">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <div class="d-flex align-items-center">
+                    <h5 class="mb-0 me-3">
+                        <i class='bx bx-line-chart text-primary me-2'></i>
+                        Market Chart
+                    </h5>
+                    <div class="btn-group">
+                        <button class="btn btn-sm btn-light active">1H</button>
+                        <button class="btn btn-sm btn-light">4H</button>
+                        <button class="btn btn-sm btn-light">1D</button>
+                        <button class="btn btn-sm btn-light">1W</button>
+                    </div>
+                </div>
+                <select class="form-select form-select-sm" style="width: auto;" id="tradingPair">
+                    {% for pair in trading_pairs %}
+                    <option value="{{ pair }}">{{ pair }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div id="tradingViewChart" style="height: 400px;"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Market Data and Technical Indicators -->
+<div class="row">
+    <!-- Market Data -->
+    <div class="col-12 col-xl-8 mb-4">
+        <div class="dashboard-card">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h5 class="mb-0">
+                    <i class='bx bx-data text-primary me-2'></i>
+                    Market Data
+                </h5>
+                <div class="input-group" style="width: auto;">
+                    <input type="text" class="form-control form-control-sm" placeholder="Search pairs...">
+                    <button class="btn btn-sm btn-primary">
+                        <i class='bx bx-search'></i>
+                    </button>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
                     <thead>
                         <tr>
                             <th>Symbol</th>
                             <th>Price</th>
                             <th>24h Change</th>
-                            <th>24h Volume</th>
-                            <th>Actions</th>
+                            <th>24h High</th>
+                            <th>24h Low</th>
+                            <th>Volume</th>
+                            <th>Trend</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {% for symbol in symbols %}
-                        {% set price_data = latest_prices[symbol] %}
+                        {% for data in market_data %}
                         <tr>
-                            <td>{{ symbol }}</td>
-                            <td>${{ "%.2f"|format(price_data.price) }}</td>
-                            <td class="text-{{ 'success' if price_data.change > 0 else 'danger' }}">
-                                {{ "%.2f"|format(price_data.change) }}%
-                            </td>
-                            <td>{{ "%.2f"|format(price_data.volume) }}</td>
                             <td>
-                                <button class="btn btn-sm btn-primary" onclick="showChart('{{ symbol }}')">
-                                    <i class='bx bx-chart'></i> Chart
-                                </button>
+                                <div class="d-flex align-items-center">
+                                    <i class='bx bx-coin text-warning me-2'></i>
+                                    {{ data.symbol }}
+                                </div>
+                            </td>
+                            <td>${{ "%.2f"|format(data.price) }}</td>
+                            <td class="text-{{ 'success' if data.change >= 0 else 'danger' }}">
+                                <i class='bx bx-{{ 'up' if data.change >= 0 else 'down' }}-arrow-alt'></i>
+                                {{ "%.2f"|format(data.change) }}%
+                            </td>
+                            <td>${{ "%.2f"|format(data.high) }}</td>
+                            <td>${{ "%.2f"|format(data.low) }}</td>
+                            <td>{{ data.volume }}</td>
+                            <td>
+                                <span class="badge bg-{{ data.trend_color }}">
+                                    {{ data.trend }}
+                                </span>
                             </td>
                         </tr>
                         {% endfor %}
-                        {% if not symbols %}
-                        <tr>
-                            <td colspan="5" class="text-center">No market data available</td>
-                        </tr>
-                        {% endif %}
                     </tbody>
                 </table>
             </div>
         </div>
     </div>
 
-    <!-- Price Chart -->
-    <div class="col-md-12">
+    <!-- Technical Indicators -->
+    <div class="col-12 col-xl-4 mb-4">
         <div class="dashboard-card">
-            <div class="d-flex justify-content-between align-items-center">
-                <h5><i class='bx bx-chart text-info'></i> Price Chart</h5>
-                <div>
-                    <select id="timeframe-select" class="form-select form-select-sm d-inline-block w-auto me-2">
-                        {% for tf in timeframes %}
-                        <option value="{{ tf }}">{{ tf }}</option>
-                        {% endfor %}
-                    </select>
-                    <select id="symbol-select" class="form-select form-select-sm d-inline-block w-auto">
-                        {% for symbol in symbols %}
-                        <option value="{{ symbol }}">{{ symbol }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h5 class="mb-0">
+                    <i class='bx bx-analyse text-primary me-2'></i>
+                    Technical Indicators
+                </h5>
+                <select class="form-select form-select-sm" style="width: auto;" id="indicatorPair">
+                    {% for pair in trading_pairs %}
+                    <option value="{{ pair }}">{{ pair }}</option>
+                    {% endfor %}
+                </select>
             </div>
-            <div class="mt-3">
-                <canvas id="priceChart"></canvas>
+            <div class="indicators-list">
+                {% for indicator in technical_indicators %}
+                <div class="p-3 border-bottom">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="text-muted">{{ indicator.name }}</span>
+                        <span class="badge bg-{{ indicator.signal_color }}">
+                            {{ indicator.signal }}
+                        </span>
+                    </div>
+                    <h4 class="mb-1">{{ indicator.value }}</h4>
+                    <small class="text-muted">
+                        Updated: {{ indicator.updated_at }}
+                    </small>
+                </div>
+                {% endfor %}
             </div>
         </div>
     </div>
 </div>
 {% endblock %}
 
-{% block scripts %}
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/tradingview-widget/dist/tradingview-widget.min.js"></script>
 <script>
-    // Event listeners
-    document.getElementById('symbol-select').addEventListener('change', function() {
-        const symbol = this.value;
-        const timeframe = document.getElementById('timeframe-select').value;
-        initChart(symbol, timeframe);
+    // Initialize TradingView widget
+    new TradingView.widget({
+        "container_id": "tradingViewChart",
+        "symbol": "BINANCE:BTCUSDT",
+        "interval": "1",
+        "timezone": "exchange",
+        "theme": "light",
+        "style": "1",
+        "toolbar_bg": "#f1f3f6",
+        "enable_publishing": false,
+        "hide_side_toolbar": false,
+        "allow_symbol_change": true,
+        "save_image": false,
+        "height": "400"
     });
 
-    document.getElementById('timeframe-select').addEventListener('change', function() {
-        const symbol = document.getElementById('symbol-select').value;
-        const timeframe = this.value;
-        initChart(symbol, timeframe);
+    // Update chart when trading pair changes
+    document.getElementById('tradingPair').addEventListener('change', function(e) {
+        const symbol = e.target.value.replace('/', '');
+        widget.setSymbol(`BINANCE:${symbol}`);
     });
 
     // WebSocket connection for real-time updates
-    const ws = new WebSocket('ws://' + window.location.host + '/ws');
-    
-    ws.onmessage = function(event) {
-        const data = JSON.parse(event.data);
-        if (data.type === 'market_update') {
-            const symbol = document.getElementById('symbol-select').value;
-            const timeframe = document.getElementById('timeframe-select').value;
-            updateChartData(symbol, timeframe);
-        }
-    };
+    function connectWebSocket() {
+        const ws = new WebSocket('ws://' + window.location.host + '/ws/market');
+        
+        ws.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            if (data.type === 'update') {
+                updateMarketData(data);
+            }
+        };
 
-    // Initialize chart with first symbol and timeframe
-    document.addEventListener('DOMContentLoaded', function() {
-        if (document.getElementById('symbol-select').options.length > 0) {
-            const symbol = document.getElementById('symbol-select').value;
-            const timeframe = document.getElementById('timeframe-select').value;
-            initChart(symbol, timeframe);
+        ws.onclose = function() {
+            setTimeout(connectWebSocket, 5000);
+        };
+    }
+
+    function updateMarketData(data) {
+        // Update market stats with animation
+        Object.keys(data.market_stats).forEach(key => {
+            const element = document.querySelector(`[data-stat="${key}"]`);
+            if (element) {
+                animateValue(element, data.market_stats[key]);
+            }
+        });
+
+        // Update market data table
+        const tbody = document.querySelector('table tbody');
+        data.market_data.forEach(item => {
+            const row = tbody.querySelector(`tr[data-symbol="${item.symbol}"]`);
+            if (row) {
+                updateMarketRow(row, item);
+            }
+        });
+
+        // Update technical indicators
+        if (data.technical_indicators) {
+            updateTechnicalIndicators(data.technical_indicators);
         }
-    });
+    }
+
+    function animateValue(element, newValue) {
+        const start = parseFloat(element.textContent);
+        const duration = 1000;
+        const startTime = performance.now();
+        
+        function update(currentTime) {
+            const elapsed = currentTime - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            
+            const current = start + (newValue - start) * progress;
+            element.textContent = current.toFixed(2);
+            
+            if (progress < 1) {
+                requestAnimationFrame(update);
+            }
+        }
+        
+        requestAnimationFrame(update);
+    }
+
+    function updateMarketRow(row, data) {
+        // Update price with flash effect
+        const priceCell = row.querySelector('td:nth-child(2)');
+        const oldPrice = parseFloat(priceCell.textContent.replace('$', ''));
+        const newPrice = parseFloat(data.price);
+        
+        priceCell.textContent = `$${newPrice.toFixed(2)}`;
+        priceCell.classList.add(newPrice > oldPrice ? 'flash-green' : 'flash-red');
+        setTimeout(() => {
+            priceCell.classList.remove('flash-green', 'flash-red');
+        }, 1000);
+
+        // Update other cells
+        row.querySelector('td:nth-child(3)').textContent = `${data.change.toFixed(2)}%`;
+        row.querySelector('td:nth-child(4)').textContent = `$${data.high.toFixed(2)}`;
+        row.querySelector('td:nth-child(5)').textContent = `$${data.low.toFixed(2)}`;
+        row.querySelector('td:nth-child(6)').textContent = data.volume;
+        
+        const trendBadge = row.querySelector('td:nth-child(7) .badge');
+        trendBadge.className = `badge bg-${data.trend_color}`;
+        trendBadge.textContent = data.trend;
+    }
+
+    function updateTechnicalIndicators(indicators) {
+        const container = document.querySelector('.indicators-list');
+        indicators.forEach(indicator => {
+            const element = container.querySelector(`[data-indicator="${indicator.name}"]`);
+            if (element) {
+                element.querySelector('.badge').className = `badge bg-${indicator.signal_color}`;
+                element.querySelector('.badge').textContent = indicator.signal;
+                element.querySelector('h4').textContent = indicator.value;
+                element.querySelector('small').textContent = `Updated: ${indicator.updated_at}`;
+            }
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', connectWebSocket);
 </script>
-{% endblock %} 
+{% endblock %}

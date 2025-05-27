@@ -2,43 +2,89 @@
 
 {% block title %}Trading Bot - Trading{% endblock %}
 
-{% block header_text %}Trading Overview{% endblock %}
+{% block header_text %}Trading Dashboard{% endblock %}
 
 {% block content %}
-<div class="row">
-    <!-- Trading Stats -->
-    <div class="col-md-12 mb-4">
-        <div class="dashboard-card">
-            <h5><i class='bx bx-line-chart text-primary'></i> Trading Statistics</h5>
-            <div class="row mt-3">
-                <div class="col-md-3">
-                    <h2 class="mb-0">{{ trading_stats.total_trades }}</h2>
-                    <small class="text-muted">Total Trades</small>
-                </div>
-                <div class="col-md-3">
-                    <h2 class="mb-0">{{ trading_stats.winning_trades }}</h2>
-                    <small class="text-muted">Winning Trades</small>
-                </div>
-                <div class="col-md-3">
-                    <h2 class="mb-0">{{ "%.1f"|format(trading_stats.win_rate) }}%</h2>
-                    <small class="text-muted">Win Rate</small>
-                </div>
-                <div class="col-md-3">
-                    <h2 class="mb-0 text-{{ 'success' if trading_stats.total_profit > 0 else 'danger' }}">
-                        ${{ "%.2f"|format(trading_stats.total_profit) }}
-                    </h2>
-                    <small class="text-muted">Total Profit</small>
-                </div>
+<!-- Trading Overview Cards -->
+<div class="row g-3 mb-4">
+    <!-- Account Balance -->
+    <div class="col-12 col-sm-6 col-xl-3">
+        <div class="stat-card h-100" style="border-left-color: var(--primary-color);">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="text-muted">Balance</div>
+                <i class='bx bx-wallet fs-4 text-primary'></i>
+            </div>
+            <h3 class="mb-0">${{ "%.2f"|format(account.balance|float) }}</h3>
+            <div class="mt-2 small">
+                <span class="text-muted">Available:</span>
+                <span class="text-primary">${{ "%.2f"|format(account.available|float) }}</span>
             </div>
         </div>
     </div>
 
-    <!-- Active Trades -->
-    <div class="col-md-12 mb-4">
+    <!-- Equity -->
+    <div class="col-12 col-sm-6 col-xl-3">
+        <div class="stat-card h-100" style="border-left-color: var(--success-color);">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="text-muted">Equity</div>
+                <i class='bx bx-chart fs-4 text-success'></i>
+            </div>
+            <h3 class="mb-0">${{ "%.2f"|format(account.equity|float) }}</h3>
+            <div class="mt-2 small">
+                <span class="text-{{ 'success' if account.equity > account.balance else 'danger' }}">
+                    <i class='bx bx-{{ 'up' if account.equity > account.balance else 'down' }}-arrow-alt'></i>
+                    {{ "%.1f"|format(((account.equity - account.balance) / account.balance * 100)|float) }}%
+                </span>
+                <span class="text-muted ms-1">vs balance</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Used Margin -->
+    <div class="col-12 col-sm-6 col-xl-3">
+        <div class="stat-card h-100" style="border-left-color: var(--warning-color);">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="text-muted">Used Margin</div>
+                <i class='bx bx-dollar fs-4 text-warning'></i>
+            </div>
+            <h3 class="mb-0">${{ "%.2f"|format(account.used_margin|float) }}</h3>
+            <div class="progress mt-2" style="height: 4px;">
+                <div class="progress-bar bg-warning" role="progressbar" 
+                     style="width: {{ (account.used_margin / account.balance * 100)|float }}%"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Risk Level -->
+    <div class="col-12 col-sm-6 col-xl-3">
+        <div class="stat-card h-100" style="border-left-color: var(--danger-color);">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="text-muted">Risk Level</div>
+                <i class='bx bx-shield-quarter fs-4 text-danger'></i>
+            </div>
+            <h3 class="mb-0">{{ "%.1f"|format(trading_stats.risk_level|default(0)) }}%</h3>
+            <div class="mt-2 small text-muted">
+                Max allowed: {{ "%.1f"|format(trading_stats.max_risk|default(0)) }}%
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Active Trades Section -->
+<div class="row mb-4">
+    <div class="col-12">
         <div class="dashboard-card">
-            <h5><i class='bx bx-trending-up text-warning'></i> Active Trades ({{ active_trades|length }})</h5>
-            <div class="table-responsive mt-3">
-                <table class="table table-hover">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h5 class="mb-0">
+                    <i class='bx bx-line-chart text-primary me-2'></i>
+                    Active Trades
+                </h5>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newTradeModal">
+                    <i class='bx bx-plus-circle me-2'></i>New Trade
+                </button>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
                     <thead>
                         <tr>
                             <th>Symbol</th>
@@ -46,43 +92,86 @@
                             <th>Entry Price</th>
                             <th>Current Price</th>
                             <th>Size</th>
-                            <th>Unrealized PnL</th>
+                            <th>PnL</th>
                             <th>Duration</th>
-                            <th>Strategy</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="active-trades">
                         {% for trade in active_trades %}
                         <tr>
-                            <td>{{ trade.symbol }}</td>
-                            <td>{{ trade.type }}</td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <i class='bx bx-{{ "up" if trade.type == "buy" else "down" }} text-{{ "success" if trade.type == "buy" else "danger" }} me-2'></i>
+                                    {{ trade.symbol }}
+                                </div>
+                            </td>
+                            <td>
+                                <span class="badge bg-{{ "success" if trade.type == "buy" else "danger" }}">
+                                    {{ trade.type|upper }}
+                                </span>
+                            </td>
                             <td>${{ "%.2f"|format(trade.entry_price) }}</td>
                             <td>${{ "%.2f"|format(trade.current_price) }}</td>
                             <td>{{ "%.4f"|format(trade.size) }}</td>
                             <td class="text-{{ 'success' if trade.unrealized_pnl > 0 else 'danger' }}">
                                 ${{ "%.2f"|format(trade.unrealized_pnl) }}
+                                <small class="text-muted d-block">
+                                    {{ "%.1f"|format(trade.unrealized_pnl_percent) }}%
+                                </small>
                             </td>
                             <td>{{ trade.duration }}</td>
-                            <td>{{ trade.strategy }}</td>
+                            <td>
+                                <div class="btn-group">
+                                    <button class="btn btn-sm btn-outline-primary" onclick="editTrade('{{ trade.id }}')">
+                                        <i class='bx bx-edit'></i>
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="closeTrade('{{ trade.id }}')">
+                                        <i class='bx bx-x'></i>
+                                    </button>
+                                </div>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="8" class="text-center py-4 text-muted">
+                                <i class='bx bx-info-circle me-2'></i>
+                                No active trades
+                            </td>
                         </tr>
                         {% endfor %}
-                        {% if not active_trades %}
-                        <tr>
-                            <td colspan="8" class="text-center">No active trades</td>
-                        </tr>
-                        {% endif %}
                     </tbody>
                 </table>
             </div>
         </div>
     </div>
+</div>
 
-    <!-- Recent Trades -->
-    <div class="col-md-12">
+<!-- Trade History Section -->
+<div class="row">
+    <div class="col-12">
         <div class="dashboard-card">
-            <h5><i class='bx bx-history text-info'></i> Recent Trades</h5>
-            <div class="table-responsive mt-3">
-                <table class="table table-hover">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h5 class="mb-0">
+                    <i class='bx bx-history text-primary me-2'></i>
+                    Trade History
+                </h5>
+                <div class="d-flex gap-2">
+                    <div class="input-group">
+                        <span class="input-group-text">
+                            <i class='bx bx-calendar'></i>
+                        </span>
+                        <input type="date" class="form-control form-control-sm" id="historyDate">
+                    </div>
+                    <select class="form-select form-select-sm" style="width: auto;">
+                        <option>All Symbols</option>
+                        <option>BTC/USDT</option>
+                        <option>ETH/USDT</option>
+                    </select>
+                </div>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover align-middle">
                     <thead>
                         <tr>
                             <th>Time</th>
@@ -93,48 +182,174 @@
                             <th>Size</th>
                             <th>PnL</th>
                             <th>Duration</th>
-                            <th>Strategy</th>
                         </tr>
                     </thead>
-                    <tbody>
-                        {% for trade in recent_trades %}
+                    <tbody id="trade-history">
+                        {% for trade in trade_history %}
                         <tr>
-                            <td>{{ trade.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                            <td>
+                                <div class="d-flex flex-column">
+                                    {{ trade.close_time.strftime('%H:%M:%S') }}
+                                    <small class="text-muted">{{ trade.close_time.strftime('%Y-%m-%d') }}</small>
+                                </div>
+                            </td>
                             <td>{{ trade.symbol }}</td>
-                            <td>{{ trade.type }}</td>
+                            <td>
+                                <span class="badge bg-{{ "success" if trade.type == "buy" else "danger" }}">
+                                    {{ trade.type|upper }}
+                                </span>
+                            </td>
                             <td>${{ "%.2f"|format(trade.entry_price) }}</td>
                             <td>${{ "%.2f"|format(trade.exit_price) }}</td>
                             <td>{{ "%.4f"|format(trade.size) }}</td>
                             <td class="text-{{ 'success' if trade.realized_pnl > 0 else 'danger' }}">
                                 ${{ "%.2f"|format(trade.realized_pnl) }}
+                                <small class="text-muted d-block">
+                                    {{ "%.1f"|format(trade.realized_pnl_percent) }}%
+                                </small>
                             </td>
                             <td>{{ trade.duration }}</td>
-                            <td>{{ trade.strategy }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="8" class="text-center py-4 text-muted">
+                                <i class='bx bx-info-circle me-2'></i>
+                                No trade history
+                            </td>
                         </tr>
                         {% endfor %}
-                        {% if not recent_trades %}
-                        <tr>
-                            <td colspan="9" class="text-center">No trade history</td>
-                        </tr>
-                        {% endif %}
                     </tbody>
                 </table>
+            </div>
+            
+            <!-- Pagination -->
+            <div class="d-flex justify-content-between align-items-center mt-4">
+                <div class="text-muted small">
+                    Showing {{ trade_history|length }} of {{ trading_stats.total_trades }} trades
+                </div>
+                <nav>
+                    <ul class="pagination pagination-sm mb-0">
+                        <li class="page-item disabled">
+                            <a class="page-link" href="#"><i class='bx bx-chevron-left'></i></a>
+                        </li>
+                        <li class="page-item active"><a class="page-link" href="#">1</a></li>
+                        <li class="page-item"><a class="page-link" href="#">2</a></li>
+                        <li class="page-item"><a class="page-link" href="#">3</a></li>
+                        <li class="page-item">
+                            <a class="page-link" href="#"><i class='bx bx-chevron-right'></i></a>
+                        </li>
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- New Trade Modal -->
+<div class="modal fade" id="newTradeModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">New Trade</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="newTradeForm">
+                    <div class="mb-3">
+                        <label class="form-label">Symbol</label>
+                        <select class="form-select" required>
+                            <option value="BTC/USDT">BTC/USDT</option>
+                            <option value="ETH/USDT">ETH/USDT</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Type</label>
+                        <div class="btn-group w-100">
+                            <input type="radio" class="btn-check" name="type" id="typeBuy" value="buy" checked>
+                            <label class="btn btn-outline-success" for="typeBuy">Buy</label>
+                            <input type="radio" class="btn-check" name="type" id="typeSell" value="sell">
+                            <label class="btn btn-outline-danger" for="typeSell">Sell</label>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Size</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" step="0.0001" required>
+                            <span class="input-group-text">BTC</span>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-6">
+                            <div class="mb-3">
+                                <label class="form-label">Stop Loss</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" step="0.01">
+                                    <span class="input-group-text">%</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="mb-3">
+                                <label class="form-label">Take Profit</label>
+                                <div class="input-group">
+                                    <input type="number" class="form-control" step="0.01">
+                                    <span class="input-group-text">%</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="submitTrade()">Place Trade</button>
             </div>
         </div>
     </div>
 </div>
 {% endblock %}
 
-{% block scripts %}
+{% block extra_js %}
 <script>
-    // WebSocket connection
-    const ws = new WebSocket('ws://' + window.location.host + '/ws');
-    
-    ws.onmessage = function(event) {
-        const data = JSON.parse(event.data);
-        if (data.type === 'update') {
-            location.reload();  // Refresh page to show updated data
+    function editTrade(tradeId) {
+        // Implement edit trade logic
+        console.log('Editing trade:', tradeId);
+    }
+
+    function closeTrade(tradeId) {
+        if (confirm('Are you sure you want to close this trade?')) {
+            // Implement close trade logic
+            console.log('Closing trade:', tradeId);
         }
-    };
+    }
+
+    function submitTrade() {
+        // Implement new trade submission logic
+        console.log('Submitting new trade');
+        $('#newTradeModal').modal('hide');
+    }
+
+    // WebSocket connection for real-time updates
+    function connectWebSocket() {
+        const ws = new WebSocket('ws://' + window.location.host + '/ws/trading');
+        
+        ws.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            if (data.type === 'update') {
+                updateTradingData(data);
+            }
+        };
+
+        ws.onclose = function() {
+            setTimeout(connectWebSocket, 5000);
+        };
+    }
+
+    function updateTradingData(data) {
+        // Implement real-time updates
+        console.log('Updating trading data:', data);
+    }
+
+    document.addEventListener('DOMContentLoaded', connectWebSocket);
 </script>
-{% endblock %} 
+{% endblock %}

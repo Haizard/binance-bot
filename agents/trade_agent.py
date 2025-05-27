@@ -10,6 +10,9 @@ from .base_agent import BaseAgent
 from binance.client import Client
 from binance.exceptions import BinanceAPIException
 from .dip_executor import DipExecutorModule
+from status_manager import StatusManager
+import yaml
+import os
 
 logger = logging.getLogger(__name__)
 
@@ -46,16 +49,60 @@ class TradeAgent(BaseAgent):
         await self.subscribe("risk.limits.update")
         await self.subscribe("market.price.*")  # For dip detection
         
-        # Request initial configuration
+        # Request initial configuration - still keep this for dynamic config updates
         await self.send_message("config.get.request", {
             'sender': self.name,
             'include_keys': True  # Need API keys
         })
         
+        # Try to load config.yaml directly if config not set
+        if not self.config or not self.client:
+            config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'config.yaml')
+            config_path = os.path.abspath(config_path)
+            if os.path.exists(config_path):
+                try:
+                    with open(config_path, 'r') as f:
+                        config_data = yaml.safe_load(f)
+                    trading_config = config_data.get('trading', {}) or config_data.get('Trading', {})
+                    api_keys = config_data.get('api', {})
+
+                    if trading_config:
+                        self.config = trading_config
+
+                    if api_keys.get('api_key') and api_keys.get('api_secret'):
+                        self.client = Client(api_keys['api_key'], api_keys['api_secret'])
+                        logger.info("TradeAgent: Binance client initialized from config.yaml")
+                        StatusManager().update("Trade", {"message": "Binance client initialized from config.yaml"})
+
+                    logger.info(f"TradeAgent: Loaded config from {config_path}")
+                    StatusManager().update("Trade", {"message": f"Loaded config from {config_path}"})
+
+                except Exception as e:
+                    logger.error(f"TradeAgent: Error loading config.yaml: {str(e)}")
+                    StatusManager().update("Trade", {"message": f"Error loading config.yaml: {str(e)}", "health": "ERROR"})
+            else:
+                 StatusManager().update("Trade", {"message": f"config.yaml not found at {config_path}", "health": "ERROR"})
+                 logger.warning(f"TradeAgent: config.yaml not found at {config_path}")
+
         # Set up dip executor
         await self.dip_executor.setup()
         
+        StatusManager().update("Trade", {"message": "Setup completed, waiting for signals"})
         logger.info("TradeAgent setup completed")
+        # Start heartbeat
+        asyncio.create_task(self._heartbeat())
+
+    async def _heartbeat(self):
+        while True:
+            # Show which symbols are being traded and last action
+            open_positions = []
+            for symbol, pos in self.positions.items():
+                open_positions.append(f"{symbol}({pos['side']})")
+            msg = "TradeAgent alive"
+            if open_positions:
+                msg += " | Open: " + ", ".join(open_positions)
+            StatusManager().update("Trade", {"message": msg})
+            await asyncio.sleep(5)
 
     async def cleanup(self) -> None:
         """Clean up the trade agent."""
@@ -99,53 +146,49 @@ class TradeAgent(BaseAgent):
     async def _handle_config_update(self, data: Dict[str, Any]) -> None:
         """Handle configuration updates."""
         config = data.get('config', {})
-        
+        api_keys = data.get('api_keys', {})
+
+        StatusManager().update("Trade", {"message": f"Received config.update: api_keys={bool(api_keys)}, config keys={list(config.keys())}"})
+        logger.info(f"TradeAgent: Received config.update: api_keys={bool(api_keys)}, config keys={list(config.keys())}")
+
         # Update trading configuration
-        trading_config = config.get('Trading', {})
+        trading_config = config.get('Trading', {}) or config.get('trading', {})
         if trading_config:
             self.config = trading_config
-            
-            # Initialize or update Binance client if API keys provided
-            api_key = trading_config.get('api_key')
-            api_secret = trading_config.get('api_secret')
-            
-            if api_key and api_secret:
-                self.client = Client(api_key, api_secret)
-                logger.info("Binance client initialized")
-        
-        # Forward dip configuration if present
-        if 'dip_config' in config:
-            await self.dip_executor.handle_message("config.dip.update", {'data': config})
+            logger.info(f"TradeAgent: Updated trading config: {trading_config}")
+
+        # Initialize or update Binance client if API keys provided
+        # Prioritize API keys from config.update if present
+        if api_keys.get('api_key') and api_keys.get('api_secret'):
+             self.client = Client(api_keys['api_key'], api_keys['api_secret'])
+             logger.info("TradeAgent: Binance client initialized/updated from config.update")
+             StatusManager().update("Trade", {"message": "Binance client initialized/updated"})
 
     async def _handle_analysis_update(self, symbol: str, data: Dict[str, Any]) -> None:
-        """
-        Handle analysis updates and execute trades if signals are present.
-        
-        Args:
-            symbol (str): Trading pair symbol
-            data (dict): Analysis data
-        """
-        if not self.client or not self._is_trading_enabled():
-            return
-            
-        analysis = data.get('analysis', {})
-        if not analysis:
-            return
-            
-        # Get the combined signal
-        signal = analysis.get('combined_signal', {})
-        if not signal:
-            return
-            
-        # Check if signal meets execution criteria
-        if await self._should_execute_trade(symbol, signal):
-            # Determine position size
-            position_size = await self._calculate_position_size(symbol)
-            
-            if signal['signal'] > 0:  # Buy signal
-                await self._execute_long_entry(symbol, position_size, signal)
-            elif signal['signal'] < 0:  # Sell signal
-                await self._execute_short_entry(symbol, position_size, signal)
+        try:
+            StatusManager().update("Trade", {"message": f"Received signal for {symbol}"})
+            if not self.client or not self._is_trading_enabled():
+                return
+            analysis = data.get('analysis', {})
+            if not analysis:
+                return
+            signal = analysis.get('combined_signal', {})
+            if not signal:
+                return
+            if await self._should_execute_trade(symbol, signal):
+                StatusManager().update("Trade", {"message": f"Executing trade for {symbol} (signal: {signal['signal']})"})
+                position_size = await self._calculate_position_size(symbol)
+                if signal['signal'] > 0:
+                    await self._execute_long_entry(symbol, position_size, signal)
+                    StatusManager().update("Trade", {"message": f"Trade executed for {symbol} (LONG) | Signal: {signal['signal']}"})
+                elif signal['signal'] < 0:
+                    await self._execute_short_entry(symbol, position_size, signal)
+                    StatusManager().update("Trade", {"message": f"Trade executed for {symbol} (SHORT) | Signal: {signal['signal']}"})
+            else:
+                StatusManager().update("Trade", {"message": f"Trade signal processed for {symbol} | Signal: {signal.get('signal', '?')}"})
+        except Exception as e:
+            StatusManager().update("Trade", {"message": f"Error handling analysis update for {symbol}: {str(e)}"})
+            logger.error(f"Error handling analysis update for {symbol}: {str(e)}")
 
     async def _handle_risk_update(self, data: Dict[str, Any]) -> None:
         """Handle risk limit updates."""

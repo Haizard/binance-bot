@@ -1,0 +1,213 @@
+:root {
+    /* Colors */
+    --primary-color: #4723D9;
+    --secondary-color: #6C757D;
+    --success-color: #28A745;
+    --danger-color: #DC3545;
+    --warning-color: #FFC107;
+    --info-color: #17A2B8;
+    --light-color: #F8F9FA;
+    --dark-color: #343A40;
+    --white-color: #FFFFFF;
+    
+    /* Gradients */
+    --primary-gradient: linear-gradient(135deg, #4723D9 0%, #6C47FF 100%);
+    --success-gradient: linear-gradient(135deg, #28A745 0%, #34CE57 100%);
+    
+    /* Spacing */
+    --header-height: 60px;
+    --nav-width: 240px;
+    --content-padding: 1.5rem;
+    
+    /* Transitions */
+    --transition-speed: 0.3s;
+    
+    /* Shadows */
+    --card-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    --nav-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+    
+    /* Border Radius */
+    --border-radius: 12px;
+    --border-radius-sm: 8px;
+    
+    /* Font */
+    --body-font: 'Inter', sans-serif;
+}
+
+/* Base Styles */
+body {
+    font-family: var(--body-font);
+    background: #F5F7FB;
+    margin: 0;
+    padding-top: var(--header-height);
+    transition: all var(--transition-speed) ease;
+}
+
+/* Mobile-First Approach */
+.container-fluid {
+    padding: var(--content-padding);
+    transition: all var(--transition-speed) ease;
+}
+
+/* Header */
+.header {
+    background: var(--white-color);
+    height: var(--header-height);
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    display: flex;
+    align-items: center;
+    padding: 0 1.5rem;
+    transition: all var(--transition-speed) ease;
+}
+
+/* Sidebar Navigation */
+.l-navbar {
+    position: fixed;
+    top: var(--header-height);
+    left: -100%;
+    width: var(--nav-width);
+    height: calc(100% - var(--header-height));
+    background: var(--white-color);
+    box-shadow: var(--nav-shadow);
+    transition: all var(--transition-speed) ease;
+    z-index: 999;
+    overflow-y: auto;
+}
+
+.l-navbar.show {
+    left: 0;
+}
+
+/* Navigation Items */
+.nav_link {
+    display: flex;
+    align-items: center;
+    padding: 1rem 1.5rem;
+    color: var(--dark-color);
+    text-decoration: none;
+    transition: all var(--transition-speed) ease;
+    border-radius: var(--border-radius-sm);
+    margin: 0.25rem 1rem;
+}
+
+.nav_link:hover, .nav_link.active {
+    background: var(--primary-gradient);
+    color: var(--white-color);
+}
+
+.nav_icon {
+    font-size: 1.5rem;
+    margin-right: 1rem;
+}
+
+/* Cards */
+.dashboard-card {
+    background: var(--white-color);
+    border-radius: var(--border-radius);
+    box-shadow: var(--card-shadow);
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    transition: all var(--transition-speed) ease;
+}
+
+.dashboard-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Stats Cards */
+.stat-card {
+    background: var(--white-color);
+    border-radius: var(--border-radius);
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    transition: all var(--transition-speed) ease;
+    border-left: 4px solid var(--primary-color);
+}
+
+/* Tables */
+.table-responsive {
+    background: var(--white-color);
+    border-radius: var(--border-radius);
+    padding: 0.5rem;
+}
+
+.table {
+    margin-bottom: 0;
+}
+
+.table th {
+    border-top: none;
+    font-weight: 600;
+    color: var(--secondary-color);
+}
+
+.table td {
+    vertical-align: middle;
+    padding: 1rem;
+}
+
+/* Buttons */
+.btn {
+    border-radius: var(--border-radius-sm);
+    padding: 0.5rem 1rem;
+    transition: all var(--transition-speed) ease;
+}
+
+.btn-primary {
+    background: var(--primary-gradient);
+    border: none;
+}
+
+/* Mobile Optimizations */
+@media (max-width: 768px) {
+    .l-navbar {
+        width: 100%;
+    }
+    
+    .dashboard-card {
+        padding: 1rem;
+    }
+    
+    .table-responsive {
+        border-radius: var(--border-radius-sm);
+    }
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+    animation: fadeIn 0.3s ease forwards;
+}
+
+/* Dark Mode Support */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --white-color: #1A1A1A;
+        --light-color: #2A2A2A;
+        --dark-color: #F8F9FA;
+    }
+    
+    body {
+        background: #121212;
+        color: #F8F9FA;
+    }
+    
+    .dashboard-card, .stat-card, .table-responsive {
+        background: #1A1A1A;
+    }
+    
+    .table td, .table th {
+        color: #F8F9FA;
+        border-color: #2A2A2A;
+    }
+}

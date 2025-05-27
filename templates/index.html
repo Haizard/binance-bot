@@ -2,60 +2,138 @@
 
 {% block title %}Trading Bot - Dashboard{% endblock %}
 
-{% block header_text %}Trading Bot Dashboard{% endblock %}
+{% block header_text %}Dashboard Overview{% endblock %}
 
 {% block content %}
-<div class="row">
-    <!-- Performance Stats -->
-    <div class="col-md-3">
-        <div class="dashboard-card">
-            <h5><i class='bx bx-line-chart text-primary'></i> Performance</h5>
-            <div class="mt-3">
-                <h2 class="mb-0" id="total-trades">{{ performance_stats.total_trades }}</h2>
-                <small class="text-muted">Total Trades</small>
+<!-- Quick Stats Row -->
+<div class="row g-3 mb-4">
+    <!-- Total Profit Card -->
+    <div class="col-12 col-sm-6 col-xl-3">
+        <div class="stat-card h-100" style="border-left-color: var(--primary-color);">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="text-muted">Total Profit</div>
+                <i class='bx bx-dollar-circle fs-4 text-primary'></i>
             </div>
-            <div class="mt-3">
-                <span class="text-{{ 'success' if performance_stats.total_profit > 0 else 'danger' }}" id="total-profit">
-                    <i class='bx bx-{{ 'up' if performance_stats.total_profit > 0 else 'down' }}-arrow-alt'></i> 
+            <h3 class="mb-0" id="total-profit">
+                <span class="text-{{ 'success' if performance_stats.total_profit > 0 else 'danger' }}">
                     ${{ "%.2f"|format(performance_stats.total_profit) }}
                 </span>
-                <br>
-                <small class="text-muted">Total Profit</small>
-            </div>
-            <div class="mt-3">
-                <h4 class="mb-0" id="win-rate">{{ "%.1f"|format(performance_stats.win_rate) }}%</h4>
-                <small class="text-muted">Win Rate</small>
+            </h3>
+            <div class="mt-2 small">
+                <span class="text-{{ 'success' if performance_stats.total_profit > 0 else 'danger' }}">
+                    <i class='bx bx-{{ 'up' if performance_stats.total_profit > 0 else 'down' }}-arrow-alt'></i>
+                    {{ "%.1f"|format(performance_stats.profit_change|default(0)) }}%
+                </span>
+                <span class="text-muted ms-1">vs last week</span>
             </div>
         </div>
     </div>
 
-    <!-- Active Trades -->
-    <div class="col-md-9">
+    <!-- Win Rate Card -->
+    <div class="col-12 col-sm-6 col-xl-3">
+        <div class="stat-card h-100" style="border-left-color: var(--success-color);">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="text-muted">Win Rate</div>
+                <i class='bx bx-target-lock fs-4 text-success'></i>
+            </div>
+            <h3 class="mb-0" id="win-rate">{{ "%.1f"|format(performance_stats.win_rate) }}%</h3>
+            <div class="progress mt-2" style="height: 4px;">
+                <div class="progress-bar bg-success" role="progressbar" 
+                     style="width: {{ performance_stats.win_rate }}%"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Trades Card -->
+    <div class="col-12 col-sm-6 col-xl-3">
+        <div class="stat-card h-100" style="border-left-color: var(--warning-color);">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="text-muted">Active Trades</div>
+                <i class='bx bx-trending-up fs-4 text-warning'></i>
+            </div>
+            <h3 class="mb-0">{{ active_trades|length }}</h3>
+            <div class="mt-2 small text-muted">
+                <span class="me-2">{{ performance_stats.total_trades }} total trades</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Account Balance Card -->
+    <div class="col-12 col-sm-6 col-xl-3">
+        <div class="stat-card h-100" style="border-left-color: var(--info-color);">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <div class="text-muted">Account Balance</div>
+                <i class='bx bx-wallet fs-4 text-info'></i>
+            </div>
+            <h3 class="mb-0">${{ "%.2f"|format(account.balance|float) }}</h3>
+            <div class="mt-2 small text-muted">
+                Available: ${{ "%.2f"|format(account.available|float) }}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Active Trades Section -->
+<div class="row mb-4">
+    <div class="col-12">
         <div class="dashboard-card">
-            <h5><i class='bx bx-trending-up text-warning'></i> Active Trades</h5>
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h5 class="mb-0">
+                    <i class='bx bx-line-chart text-primary me-2'></i>
+                    Active Trades
+                </h5>
+                <button class="btn btn-sm btn-primary" onclick="location.href='/trading'">
+                    View All
+                </button>
+            </div>
             <div class="table-responsive">
-                <table class="table table-hover">
+                <table class="table table-hover align-middle">
                     <thead>
                         <tr>
                             <th>Symbol</th>
                             <th>Type</th>
                             <th>Entry Price</th>
                             <th>Current Price</th>
-                            <th>Unrealized PnL</th>
+                            <th>PnL</th>
                             <th>Duration</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody id="active-trades">
                         {% for trade in active_trades %}
-                        <tr>
-                            <td>{{ trade.symbol }}</td>
-                            <td>{{ trade.type }}</td>
+                        <tr class="align-middle">
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    <i class='bx bx-{{ "up" if trade.type == "buy" else "down" }} text-{{ "success" if trade.type == "buy" else "danger" }} me-2'></i>
+                                    {{ trade.symbol }}
+                                </div>
+                            </td>
+                            <td>
+                                <span class="badge bg-{{ "success" if trade.type == "buy" else "danger" }}">
+                                    {{ trade.type|upper }}
+                                </span>
+                            </td>
                             <td>${{ "%.2f"|format(trade.entry_price) }}</td>
                             <td>${{ "%.2f"|format(trade.current_price) }}</td>
                             <td class="text-{{ 'success' if trade.unrealized_pnl > 0 else 'danger' }}">
                                 ${{ "%.2f"|format(trade.unrealized_pnl) }}
+                                <small class="text-muted d-block">
+                                    {{ "%.1f"|format(trade.unrealized_pnl_percent) }}%
+                                </small>
                             </td>
                             <td>{{ trade.duration }}</td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-danger">
+                                    Close
+                                </button>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center py-4 text-muted">
+                                <i class='bx bx-info-circle me-2'></i>
+                                No active trades
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -65,36 +143,63 @@
     </div>
 </div>
 
-<!-- Recent Trades -->
-<div class="row mt-4">
+<!-- Recent Activity Section -->
+<div class="row">
     <div class="col-12">
         <div class="dashboard-card">
-            <h5><i class='bx bx-history text-info'></i> Recent Trades</h5>
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h5 class="mb-0">
+                    <i class='bx bx-history text-primary me-2'></i>
+                    Recent Activity
+                </h5>
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-light dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                        Last 24 Hours
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="#">Last 24 Hours</a></li>
+                        <li><a class="dropdown-item" href="#">Last 7 Days</a></li>
+                        <li><a class="dropdown-item" href="#">Last 30 Days</a></li>
+                    </ul>
+                </div>
+            </div>
             <div class="table-responsive">
-                <table class="table table-hover">
+                <table class="table table-hover align-middle">
                     <thead>
                         <tr>
                             <th>Time</th>
-                            <th>Symbol</th>
                             <th>Type</th>
-                            <th>Entry Price</th>
-                            <th>Exit Price</th>
+                            <th>Symbol</th>
+                            <th>Entry/Exit</th>
                             <th>PnL</th>
-                            <th>Duration</th>
                         </tr>
                     </thead>
-                    <tbody id="recent-trades">
-                        {% for trade in recent_trades %}
+                    <tbody id="recent-activities">
+                        {% for trade in recent_activities %}
                         <tr>
-                            <td>{{ trade.timestamp }}</td>
-                            <td>{{ trade.symbol }}</td>
-                            <td>{{ trade.type }}</td>
-                            <td>${{ "%.2f"|format(trade.entry_price) }}</td>
-                            <td>${{ "%.2f"|format(trade.exit_price) }}</td>
-                            <td class="text-{{ 'success' if trade.realized_pnl > 0 else 'danger' }}">
-                                ${{ "%.2f"|format(trade.realized_pnl) }}
+                            <td>
+                                <div class="d-flex flex-column">
+                                    {{ trade.timestamp.strftime('%H:%M:%S') }}
+                                    <small class="text-muted">{{ trade.timestamp.strftime('%Y-%m-%d') }}</small>
+                                </div>
                             </td>
-                            <td>{{ trade.duration }}</td>
+                            <td>
+                                <span class="badge bg-{{ 'success' if trade.type == 'buy' else 'danger' }}">
+                                    {{ trade.type|upper }}
+                                </span>
+                            </td>
+                            <td>{{ trade.symbol }}</td>
+                            <td>${{ "%.2f"|format(trade.price) }}</td>
+                            <td class="text-{{ 'success' if trade.pl > 0 else 'danger' }}">
+                                ${{ "%.2f"|format(trade.pl) }}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5" class="text-center py-4 text-muted">
+                                <i class='bx bx-info-circle me-2'></i>
+                                No recent activity
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -105,7 +210,7 @@
 </div>
 {% endblock %}
 
-{% block scripts %}
+{% block extra_js %}
 <script>
     // WebSocket connection with auto-reconnect
     function connectWebSocket() {
@@ -115,7 +220,6 @@
 
         ws.onopen = function() {
             console.log('WebSocket connected');
-            // Send ping every 30 seconds
             pingInterval = setInterval(() => {
                 if (ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({type: 'ping'}));
@@ -126,7 +230,6 @@
         ws.onclose = function() {
             console.log('WebSocket disconnected');
             clearInterval(pingInterval);
-            // Try to reconnect after 5 seconds
             reconnectTimeout = setTimeout(connectWebSocket, 5000);
         };
 
@@ -138,9 +241,7 @@
             try {
                 const data = JSON.parse(event.data);
                 
-                if (data.type === 'pong') {
-                    return; // Ignore pong responses
-                }
+                if (data.type === 'pong') return;
                 
                 if (data.type === 'update') {
                     updateDashboard(data.data);
@@ -150,7 +251,6 @@
             }
         };
 
-        // Clean up on page unload
         window.onbeforeunload = function() {
             clearInterval(pingInterval);
             clearTimeout(reconnectTimeout);
@@ -158,53 +258,49 @@
         };
     }
 
-    // Update dashboard with new data
     function updateDashboard(data) {
-        // Update performance stats
-        const stats = data.performance_stats;
-        document.getElementById('total-trades').textContent = stats.total_trades;
-        document.getElementById('win-rate').textContent = stats.win_rate.toFixed(1) + '%';
+        // Update stats with smooth animation
+        animateValue('total-profit', data.performance_stats.total_profit);
+        animateValue('win-rate', data.performance_stats.win_rate);
         
-        const profitEl = document.getElementById('total-profit');
-        profitEl.innerHTML = `
-            <i class='bx bx-${stats.total_profit > 0 ? 'up' : 'down'}-arrow-alt'></i>
-            $${stats.total_profit.toFixed(2)}
-        `;
-        profitEl.className = `text-${stats.total_profit > 0 ? 'success' : 'danger'}`;
-
-        // Update active trades
-        const activeTrades = document.getElementById('active-trades');
-        activeTrades.innerHTML = data.active_trades.map(trade => `
-            <tr>
-                <td>${trade.symbol}</td>
-                <td>${trade.type}</td>
-                <td>$${trade.entry_price.toFixed(2)}</td>
-                <td>$${trade.current_price.toFixed(2)}</td>
-                <td class="text-${trade.unrealized_pnl > 0 ? 'success' : 'danger'}">
-                    $${trade.unrealized_pnl.toFixed(2)}
-                </td>
-                <td>${trade.duration}</td>
-            </tr>
-        `).join('');
-
-        // Update recent trades
-        const recentTrades = document.getElementById('recent-trades');
-        recentTrades.innerHTML = data.recent_trades.map(trade => `
-            <tr>
-                <td>${new Date(trade.timestamp).toLocaleString()}</td>
-                <td>${trade.symbol}</td>
-                <td>${trade.type}</td>
-                <td>$${trade.entry_price.toFixed(2)}</td>
-                <td>$${trade.exit_price.toFixed(2)}</td>
-                <td class="text-${trade.realized_pnl > 0 ? 'success' : 'danger'}">
-                    $${trade.realized_pnl.toFixed(2)}
-                </td>
-                <td>${trade.duration}</td>
-            </tr>
-        `).join('');
+        // Update tables with fade effect
+        updateTableWithAnimation('active-trades', data.active_trades);
+        updateTableWithAnimation('recent-activities', data.recent_activities);
     }
 
-    // Start WebSocket connection when page loads
+    function animateValue(elementId, newValue) {
+        const element = document.getElementById(elementId);
+        const start = parseFloat(element.textContent.replace(/[^0-9.-]+/g, ""));
+        const duration = 1000;
+        const startTime = performance.now();
+        
+        function update(currentTime) {
+            const elapsed = currentTime - startTime;
+            const progress = Math.min(elapsed / duration, 1);
+            
+            const current = start + (newValue - start) * progress;
+            element.textContent = elementId.includes('rate') ? 
+                `${current.toFixed(1)}%` : 
+                `$${current.toFixed(2)}`;
+            
+            if (progress < 1) {
+                requestAnimationFrame(update);
+            }
+        }
+        
+        requestAnimationFrame(update);
+    }
+
+    function updateTableWithAnimation(tableId, data) {
+        const tbody = document.getElementById(tableId);
+        tbody.style.opacity = '0';
+        
+        setTimeout(() => {
+            // Update table content here
+            tbody.style.opacity = '1';
+        }, 300);
+    }
+
     document.addEventListener('DOMContentLoaded', connectWebSocket);
 </script>
-{% endblock %} 
+{% endblock %}

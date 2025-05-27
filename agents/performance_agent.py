@@ -12,6 +12,7 @@ from reporting.performance_report import PerformanceReporter
 import os
 import shutil
 import asyncio
+from status_manager import StatusManager
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +46,24 @@ class PerformanceAgent(BaseAgent):
             'include_keys': False
         })
         
+        StatusManager().update("Performance", {"message": "Setup completed, waiting for trades"})
         logger.info("PerformanceAgent setup completed")
+        # Start heartbeat
+        asyncio.create_task(self._heartbeat())
+
+    async def _heartbeat(self):
+        while True:
+            # Show summary of trades, PnL, and open positions
+            total_trades = self.metrics.get('total_trades', 0)
+            total_profit = self.metrics.get('total_profit', 0)
+            open_positions = []
+            for symbol, pos in self.positions.items():
+                open_positions.append(f"{symbol}({pos['side']})")
+            msg = f"PerformanceAgent alive | Trades: {total_trades}, PnL: {total_profit:.2f}"
+            if open_positions:
+                msg += " | Open: " + ", ".join(open_positions)
+            StatusManager().update("Performance", {"message": msg})
+            await asyncio.sleep(5)
 
     async def cleanup(self) -> None:
         """Clean up the performance agent."""
@@ -162,6 +180,7 @@ class PerformanceAgent(BaseAgent):
     async def _update_metrics(self) -> None:
         """Update performance metrics."""
         try:
+            StatusManager().update("Performance", {"message": "Updating performance metrics..."})
             # Calculate basic metrics
             total_trades = len(self.trades)
             winning_trades = len([t for t in self.trades if t.get('pnl', 0) > 0])
@@ -196,7 +215,11 @@ class PerformanceAgent(BaseAgent):
                 'metrics': self.metrics
             })
             
+            StatusManager().update("Performance", {"message": f"Metrics updated: {self.metrics.get('total_trades', 0)} trades, PnL: {self.metrics.get('total_profit', 0):.2f}"})
+            StatusManager().update("Performance", {"message": "Performance metrics updated"})
+            
         except Exception as e:
+            StatusManager().update("Performance", {"message": f"Error updating metrics: {str(e)}"})
             logger.error(f"Error updating metrics: {str(e)}")
 
     def _calculate_max_drawdown(self) -> float:
@@ -374,6 +397,7 @@ class PerformanceAgent(BaseAgent):
     async def _generate_performance_report(self) -> None:
         """Generate comprehensive performance report."""
         try:
+            StatusManager().update("Performance", {"message": "Generating performance report..."})
             # Get current metrics
             current_metrics = self.metrics.copy()
             
@@ -401,7 +425,10 @@ class PerformanceAgent(BaseAgent):
                 'report': report
             })
             
+            StatusManager().update("Performance", {"message": "Performance report generated."})
+            
         except Exception as e:
+            StatusManager().update("Performance", {"message": f"Error generating performance report: {str(e)}"})
             logger.error(f"Error generating performance report: {str(e)}")
 
     def _calculate_profit_factor(self) -> float:

@@ -5,10 +5,14 @@ import logging
 import pandas as pd
 from typing import Any, Dict, Optional, List
 from binance.client import Client
-from binance import ThreadedWebsocketManager
+from binance import BinanceSocketManager
 from datetime import datetime, timedelta
 from .base_agent import BaseAgent
 import asyncio
+from status_manager import StatusManager
+import yaml
+import os
+from binance import AsyncClient
 
 logger = logging.getLogger(__name__)
 
@@ -26,12 +30,12 @@ class DataAgent(BaseAgent):
         """
         super().__init__("Data", message_broker)
         self.client: Optional[Client] = None
-        self.socket_manager: Optional[ThreadedWebsocketManager] = None
-        self.websocket_connections = {}
+        self.socket_manager: Optional[BinanceSocketManager] = None
+        self.websocket_tasks = {}
         self.price_cache = {}
         self.historical_data = {}
         self.active_symbols = set()
-        self.interval = '1h'  # Default interval
+        self.interval = '1m'  # Changed default interval to 1m
         self.api_keys = {}
 
     async def setup(self) -> None:
@@ -48,14 +52,92 @@ class DataAgent(BaseAgent):
             'include_keys': True
         })
         
+        StatusManager().update("Data", {"message": "Setup completed, waiting for data requests"})
         logger.info("DataAgent setup completed")
+        # Start heartbeat
+        asyncio.create_task(self._heartbeat())
+        # Try to load config.yaml directly if config not set
+        if not hasattr(self, 'config') or not self.config:
+            config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'config.yaml')
+            config_path = os.path.abspath(config_path)
+            try:
+                with open(config_path, 'r') as f:
+                    config = yaml.safe_load(f)
+                self.config = config
+                api_cfg = config.get('api', {})
+                trading_cfg = config.get('trading', {})
+                if api_cfg:
+                    self.api_keys = {
+                        'api_key': api_cfg.get('api_key'),
+                        'api_secret': api_cfg.get('api_secret')
+                    }
+                    await self._initialize_client()
+                StatusManager().update("Data", {"message": f"Loaded config.yaml directly: api_keys={bool(self.api_keys)}, symbols={trading_cfg.get('symbols', [])}"})
+                logger.info(f"Loaded config.yaml directly: api_keys={self.api_keys}, trading={trading_cfg}")
+                # Auto-subscribe to symbols
+                if trading_cfg:
+                    for symbol in trading_cfg.get('symbols', []):
+                        await self._handle_subscribe_request({'symbol': symbol})
+            except Exception as e:
+                StatusManager().update("Data", {"message": f"Error loading config.yaml: {str(e)}"})
+                logger.error(f"Error loading config.yaml: {str(e)}")
+
+    async def _heartbeat(self):
+        while True:
+            symbol_status = []
+            debug_info = []
+            # Log client state and active symbols
+            if not self.client:
+                debug_info.append("Binance client NOT initialized")
+            else:
+                debug_info.append("Binance client OK")
+            debug_info.append(f"Active symbols: {list(self.active_symbols)}")
+            
+            if not self.active_symbols:
+                msg = "DataAgent alive | No active symbols | " + ", ".join(debug_info)
+                StatusManager().update("Data", {"message": msg})
+                await asyncio.sleep(5)
+                continue
+            for symbol in self.active_symbols:
+                price = self.price_cache.get(symbol)
+                bids = asks = []
+                volume = '?'
+                spread = '?'
+                error = None
+                # Try to get order book and ticker info if client is available
+                if self.client:
+                    try:
+                        ob = await self.client.get_order_book(symbol=symbol)
+                        bids = ob['bids'][:5] if ob['bids'] else []
+                        asks = ob['asks'][:5] if ob['asks'] else []
+                        ticker = await self.client.get_ticker(symbol=symbol)
+                        volume = ticker.get('volume', '?')
+                        if bids and asks:
+                            spread = f"{float(asks[0][0]) - float(bids[0][0]):.2g}"
+                    except Exception as e:
+                        error = str(e)
+                bid_str = ','.join([f"{b[0]}({b[1]})" for b in bids]) if bids else '?'
+                ask_str = ','.join([f"{a[0]}({a[1]})" for a in asks]) if asks else '?'
+                status = (f"{symbol}: price={price if price is not None else '?'} "
+                          f"spread={spread} vol={volume} "
+                          f"bids=[{bid_str}] asks=[{ask_str}]")
+                if error:
+                    status += f" [ERROR: {error}]"
+                symbol_status.append(status)
+            msg = "DataAgent alive"
+            if symbol_status:
+                msg += " | " + " || ".join(symbol_status)
+            if debug_info:
+                 msg += " | " + ", ".join(debug_info)
+            StatusManager().update("Data", {"message": msg})
+            await asyncio.sleep(5)
 
     async def cleanup(self) -> None:
         """Clean up the data agent."""
         # Close all WebSocket connections
         if self.socket_manager:
             self.socket_manager.stop()
-            for symbol in list(self.websocket_connections.keys()):
+            for symbol in list(self.websocket_tasks.keys()):
                 await self._stop_symbol_stream(symbol)
         
         # Unsubscribe from all topics
@@ -85,24 +167,43 @@ class DataAgent(BaseAgent):
         elif topic.startswith("config.get.response"):
             await self._handle_config_response(data)
 
+    async def _auto_subscribe_symbols(self, config):
+        trading_cfg = config.get('trading') or config.get('Trading')
+        if trading_cfg:
+            symbols = trading_cfg.get('symbols', [])
+            for symbol in symbols:
+                await self._handle_subscribe_request({'symbol': symbol})
+                StatusManager().update("Data", {"message": f"Auto-subscribed to {symbol} after config loaded"})
+
     async def _handle_config_update(self, data: Dict[str, Any]) -> None:
         """Handle configuration updates."""
         config = data.get('config', {})
         api_keys = data.get('api_keys', {})
+
+        StatusManager().update("Data", {"message": f"Received config.update: api_keys={bool(api_keys)}, config keys={list(config.keys())}"})
+        logger.info(f"Received config.update: api_keys={api_keys}, config={config}")
         
         if api_keys:
             self.api_keys = api_keys
             # Initialize/reinitialize Binance client if API keys changed
-            self._initialize_client()
+            await self._initialize_client()
         
         # Update trading parameters
-        trading_config = config.get('Trading', {})
+        trading_config = config.get('Trading', {}) or config.get('trading', {})
         if trading_config:
             new_interval = trading_config.get('interval')
+            # Only update interval if explicitly provided in config and different
             if new_interval and new_interval != self.interval:
                 self.interval = new_interval
-                # Restart streams with new interval if needed
+                logger.info(f"DataAgent interval updated to: {self.interval}. Restarting streams...")
                 await self._restart_streams()
+            elif not new_interval:
+                 # If no interval in config, use the default '1m'
+                 self.interval = '1m'
+                 logger.info(f"No interval specified in config, using default: {self.interval}. Restarting streams...")
+                 await self._restart_streams()
+        # Auto-subscribe after config update
+        await self._auto_subscribe_symbols(config)
 
     async def _handle_subscribe_request(self, data: Dict[str, Any]) -> None:
         """Handle symbol subscription requests."""
@@ -114,8 +215,10 @@ class DataAgent(BaseAgent):
         try:
             await self._start_symbol_stream(symbol)
             self.active_symbols.add(symbol)
+            StatusManager().update("Data", {"message": f"Subscribed to {symbol} data stream"})
             logger.info(f"Subscribed to {symbol} data stream")
         except Exception as e:
+            StatusManager().update("Data", {"message": f"Error subscribing to {symbol}: {str(e)}"})
             logger.error(f"Error subscribing to {symbol}: {str(e)}")
 
     async def _handle_unsubscribe_request(self, data: Dict[str, Any]) -> None:
@@ -147,6 +250,7 @@ class DataAgent(BaseAgent):
             historical_data = await self._fetch_historical_data(
                 symbol, start_time, end_time, limit
             )
+            StatusManager().update("Data", {"message": f"Fetched historical data for {symbol}"})
             
             response = {
                 'symbol': symbol,
@@ -156,6 +260,7 @@ class DataAgent(BaseAgent):
             await self.send_message(f"data.historical.response.{sender}", response)
             
         except Exception as e:
+            StatusManager().update("Data", {"message": f"Error fetching historical data for {symbol}: {str(e)}"})
             logger.error(f"Error fetching historical data for {symbol}: {str(e)}")
             await self.send_message(f"data.historical.response.{sender}", {
                 'symbol': symbol,
@@ -166,85 +271,121 @@ class DataAgent(BaseAgent):
         """Handle configuration response."""
         config = data.get('config', {})
         api_keys = data.get('api_keys', {})
+
+        StatusManager().update("Data", {"message": f"Received config.get.response: api_keys={bool(api_keys)}, config keys={list(config.keys())}"})
+        logger.info(f"Received config.get.response: api_keys={api_keys}, config={config}")
         
         if api_keys:
             self.api_keys = api_keys
-            self._initialize_client()
+            await self._initialize_client()
         
         # Initialize with configured trading pair
-        trading_config = config.get('Trading', {})
+        trading_config = config.get('Trading', {}) or config.get('trading', {})
         if trading_config:
-            symbol = trading_config.get('symbol')
-            self.interval = trading_config.get('interval', self.interval)
-            if symbol:
+            symbol = trading_config.get('symbol') # This seems wrong, should subscribe to all symbols in list
+            symbols = trading_config.get('symbols', []) # Correctly get list of symbols
+            new_interval = trading_config.get('interval')
+            
+            # Only update interval if explicitly provided in config
+            if new_interval:
+                 self.interval = new_interval
+                 logger.info(f"DataAgent interval set from config response: {self.interval}")
+
+            # Subscribe to all symbols from config
+            for symbol in symbols:
                 await self._start_symbol_stream(symbol)
                 self.active_symbols.add(symbol)
+                logger.info(f"DataAgent auto-subscribed to {symbol} from config response")
 
-    def _initialize_client(self) -> None:
-        """Initialize or reinitialize the Binance client."""
+        # Auto-subscribe after config response (redundant with above, but keeping for now)
+        # await self._auto_subscribe_symbols(config)
+
+    async def _initialize_client(self) -> None:
+        """Initialize or reinitialize the Binance client and socket manager (async)."""
         if self.api_keys.get('api_key') and self.api_keys.get('api_secret'):
-            self.client = Client(
-                self.api_keys['api_key'],
-                self.api_keys['api_secret']
-            )
-            if self.socket_manager:
-                self.socket_manager.stop()
-            self.socket_manager = ThreadedWebsocketManager(
-                api_key=self.api_keys['api_key'],
-                api_secret=self.api_keys['api_secret']
-            )
-            self.socket_manager.start()
-            logger.info("Binance client initialized")
+            # Ensure AsyncClient is used for async operations
+            if not isinstance(self.client, Client) or not hasattr(self.client, 'close_connection'): # Basic check for AsyncClient properties
+                logger.info("Initializing AsyncClient")
+                # Pass requests_params={} to explicitly not use a proxy
+                self.client = await AsyncClient.create(
+                    api_key=self.api_keys['api_key'],
+                    api_secret=self.api_keys['api_secret'],
+                    requests_params={} # Explicitly pass empty requests_params
+                )
+                if self.socket_manager:
+                    # No explicit close for async manager, just drop reference
+                    self.socket_manager = None
+                self.socket_manager = BinanceSocketManager(self.client)
+                logger.info("Binance client and async socket manager initialized")
+            else:
+                logger.info("Binance client already initialized")
         else:
             logger.error("Cannot initialize Binance client - missing API keys")
 
     async def _start_symbol_stream(self, symbol: str) -> None:
-        """
-        Start WebSocket stream for a symbol.
-        
-        Args:
-            symbol (str): Trading pair symbol
-        """
-        if not self.socket_manager:
-            logger.error("Cannot start stream - socket manager not initialized")
+        """Start a WebSocket kline stream for a given symbol using the existing socket manager."""
+        if symbol in self.websocket_tasks:
+            logger.warning(f"Stream for {symbol} already exists.")
             return
 
-        if symbol in self.websocket_connections:
-            logger.warning(f"Stream for {symbol} already exists")
+        if not self.client or not self.socket_manager:
+            logger.error(f"Binance client or socket manager not initialized, cannot start stream for {symbol}.")
+            StatusManager().update("Data", {"message": f"Cannot start stream for {symbol}: Client/Socket Manager not initialized", "health": "ERROR"})
             return
 
         try:
-            # Start kline/candlestick stream
-            stream_name = self.socket_manager.start_kline_socket(
-                callback=self._handle_socket_message,
-                symbol=symbol,
-                interval=self.interval
-            )
+            # Use the existing socket manager to start the kline stream
+            # stream_name = f'{symbol.lower()}@kline_{self.interval}' # Construction moved into kline_socket call
+            logger.info(f"Attempting to start kline stream for {symbol} with interval {self.interval}")
             
-            self.websocket_connections[symbol] = stream_name
-            logger.info(f"Started {symbol} stream")
-            
+            async def kline_listener():
+                # Use the stream context manager from the existing socket manager
+                try:
+                    async with self.socket_manager.kline_socket(symbol=symbol.lower(), interval=self.interval) as stream:
+                        logger.info(f"WebSocket kline stream started for {symbol} with interval {self.interval}")
+                        while True:
+                            msg = await stream.recv()
+                            logger.debug(f"Received message for {symbol}: {msg}") # Debugging: Log all incoming messages
+                            if isinstance(msg, dict):
+                                self._handle_socket_message(msg)
+                            else:
+                                logger.warning(f"Received non-dict message for {symbol}: {msg}")
+                except Exception as e:
+                    logger.error(f"Error within kline_listener for {symbol}: {str(e)}")
+                    # Attempt to restart the stream after a delay
+                    await asyncio.sleep(10) # Wait before attempting restart
+                    logger.info(f"Attempting to restart kline stream for {symbol} after error.")
+                    # Need a way to signal the outer function to restart, or handle restart internally
+                    # For now, just log and the outer loop might try again depending on agent lifecycle
+                    # A more robust approach would involve managing tasks and restarting them explicitly
+                    pass # Allow the task to end after logging the error
+
+            task = asyncio.create_task(kline_listener())
+            self.websocket_tasks[symbol] = task
+            logger.info(f"Started {symbol} stream (async) using existing socket manager")
+
         except Exception as e:
-            logger.error(f"Error starting {symbol} stream: {str(e)}")
-            raise
+            logger.error(f"Error starting WebSocket stream for {symbol}: {str(e)}")
+            StatusManager().update("Data", {"message": f"Error starting stream for {symbol}: {str(e)}", "health": "ERROR"})
 
     async def _stop_symbol_stream(self, symbol: str) -> None:
         """
-        Stop WebSocket stream for a symbol.
-        
-        Args:
-            symbol (str): Trading pair symbol
+        Stop async WebSocket stream for a symbol.
         """
-        if symbol not in self.websocket_connections:
+        if symbol not in self.websocket_tasks:
             return
-
         try:
-            stream_name = self.websocket_connections[symbol]
-            self.socket_manager.stop_socket(stream_name)
-            del self.websocket_connections[symbol]
-            logger.info(f"Stopped {symbol} stream")
-            
+            task = self.websocket_tasks[symbol]
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+            del self.websocket_tasks[symbol]
+            StatusManager().update("Data", {"message": f"Stopped {symbol} stream (async)"})
+            logger.info(f"Stopped {symbol} stream (async)")
         except Exception as e:
+            StatusManager().update("Data", {"message": f"Error stopping {symbol} stream: {str(e)}"})
             logger.error(f"Error stopping {symbol} stream: {str(e)}")
             raise
 
@@ -311,47 +452,52 @@ class DataAgent(BaseAgent):
 
     def _handle_socket_message(self, msg: Dict[str, Any]) -> None:
         """
-        Process incoming WebSocket messages.
-        
-        Args:
-            msg (dict): Message from WebSocket
+        Handle incoming WebSocket messages.
+        Currently only processes kline updates.
         """
-        try:
-            if msg.get('e') == 'error':
-                logger.error(f"WebSocket error: {msg.get('m')}")
-                return
+        #logger.debug(f"Processing socket message: {msg}") # This can be noisy, use sparingly
+        
+        event_type = msg.get('e')
+        
+        if event_type == 'kline':
+            kline = msg.get('k')
+            if kline:
+                symbol = kline.get('s')
+                # We want to update the price cache on ANY kline update, not just closed ones
+                # is_kline_closed = kline.get('x')
+                
+                if symbol:
+                    # Process kline update (either open or closed)
+                    # logger.info(f"Received kline update for {symbol}") # Can be noisy
+                    try:
+                        close_price = float(kline['c'])
+                        # Update price cache with the latest closing price from the kline update
+                        self.price_cache[symbol] = close_price
+                        logger.debug(f"Updated price_cache for {symbol}: {self.price_cache[symbol]}") # Debugging: Log price update
+                        
+                        # Optionally, publish the raw kline data for other agents
+                        # This is commented out to reduce message traffic unless needed
+                        # processed_kline = {
+                        #     'timestamp': int(kline['t']),
+                        #     'open': float(kline['o']),
+                        #     'high': float(kline['h']),
+                        #     'low': float(kline['l']),
+                        #     'close': close_price,
+                        #     'volume': float(kline['v']),
+                        #     'symbol': symbol
+                        # }
+                        # asyncio.create_task(
+                        #     self.send_message(
+                        #         f"data.update.{symbol}",
+                        #         {'type': 'kline', 'data': processed_kline}
+                        #     )
+                        # )
 
-            # Extract relevant data from the message
-            if msg.get('e') == 'kline':
-                kline = msg['k']
-                symbol = msg['s']
-                
-                data = {
-                    'symbol': symbol,
-                    'interval': kline['i'],
-                    'open_time': kline['t'],
-                    'open': float(kline['o']),
-                    'high': float(kline['h']),
-                    'low': float(kline['l']),
-                    'close': float(kline['c']),
-                    'volume': float(kline['v']),
-                    'close_time': kline['T'],
-                    'is_closed': kline['x']
-                }
-                
-                # Update price cache
-                self.price_cache[symbol] = float(kline['c'])
-                
-                # Broadcast update
-                asyncio.create_task(
-                    self.send_message(
-                        f"data.update.{symbol}",
-                        {'type': 'kline', 'data': data}
-                    )
-                )
-                
-        except Exception as e:
-            logger.error(f"Error processing WebSocket message: {str(e)}")
+                    except Exception as e:
+                        logger.error(f"Error processing kline data for {symbol}: {str(e)}")
+        # Add handling for other potential message types if necessary in the future
+        # elif event_type == 'some_other_event':
+        #     pass
 
     def get_latest_price(self, symbol: str) -> Optional[float]:
         """

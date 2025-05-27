@@ -605,9 +605,19 @@ def index():
         account_info = get_latest_account_info()
         performance = get_performance_metrics()
 
+        # Ensure account_info has all required keys with default values
+        if account_info is None:
+            account_info = {'balance': '$0', 'available': '$0', 'equity': '$0', 'used_margin': '$0'}
+        else:
+            account_info.setdefault('balance', '$0')
+            account_info.setdefault('available', '$0')
+            account_info.setdefault('equity', '$0')
+            account_info.setdefault('used_margin', '$0')
+
         # Calculate statistics
         trading_stats = calculate_trading_stats(trade_history)
-        
+        performance_metrics = calculate_performance_metrics(trade_history)
+
         # Prepare chart data
         dates = [(datetime.now() - timedelta(days=x)).strftime('%Y-%m-%d') for x in range(30, 0, -1)]
         
@@ -635,7 +645,7 @@ def index():
 
         return render_template('index.html',
             trading_stats=trading_stats,
-            performance_stats={'win_rate': trading_stats['win_rate']},
+            performance_stats=performance_metrics,
             alert_stats={'active_alerts': len([t for t in active_trades if t.get('has_alert', False)]),
                         'triggered_today': len([t for t in trade_history if t.get('alert_triggered')])},
             market_stats={'active_pairs': len(set(t.get('pair') for t in active_trades)),
@@ -644,10 +654,26 @@ def index():
             volume_chart_data=volume_chart_data,
             recent_activities=trade_history[:5],
             active_trades=active_trades,
-            account=account_info or {'balance': '$0', 'equity': '$0', 'used_margin': '$0'})
+            account=account_info)
     except Exception as e:
         logger.error(f"Error in index route: {str(e)}")
-        return render_template('index.html', error=str(e))
+        # Provide default empty values for template variables to avoid template errors
+        return render_template('index.html',
+                               error=str(e),
+                               trading_stats={},
+                               performance_stats={
+                                   'total_profit': 0,
+                                   'profit_change': 0,
+                                   'win_rate': 0,
+                                   'total_trades': 0
+                               },
+                               alert_stats={},
+                               market_stats={},
+                               profit_chart_data={},
+                               volume_chart_data={},
+                               recent_activities=[],
+                               active_trades=[],
+                               account={'balance': '$0', 'available': '$0', 'equity': '$0', 'used_margin': '$0'})
 
 @app.route('/trading')
 def trading():
@@ -658,11 +684,20 @@ def trading():
         account_info = get_latest_account_info()
         trading_stats = calculate_trading_stats(trade_history)
 
+        # Ensure account_info has all required keys with default values
+        if account_info is None:
+            account_info = {'balance': '$0', 'available': '$0', 'equity': '$0', 'used_margin': '$0'}
+        else:
+            account_info.setdefault('balance', '$0')
+            account_info.setdefault('available', '$0')
+            account_info.setdefault('equity', '$0')
+            account_info.setdefault('used_margin', '$0')
+
         return render_template('trading.html',
             active_trades=active_trades,
             trade_history=trade_history,
             trading_stats=trading_stats,
-            account=account_info or {'balance': '$0', 'equity': '$0', 'used_margin': '$0'})
+            account=account_info)
     except Exception as e:
         logger.error(f"Error in trading route: {str(e)}")
         return render_template('trading.html', error=str(e))
