@@ -682,16 +682,22 @@ def trading():
         active_trades = get_active_trades()
         trade_history = get_trade_history()
         account_info = get_latest_account_info()
-        trading_stats = calculate_trading_stats(trade_history)
 
-        # Ensure account_info has all required keys with default values
-        if account_info is None:
-            account_info = {'balance': '$0', 'available': '$0', 'equity': '$0', 'used_margin': '$0'}
-        else:
-            account_info.setdefault('balance', '$0')
-            account_info.setdefault('available', '$0')
-            account_info.setdefault('equity', '$0')
-            account_info.setdefault('used_margin', '$0')
+        # Defensive check: ensure account_info is a dict and has required keys with numeric defaults
+        if not isinstance(account_info, dict):
+            account_info = {}
+        for key in ['balance', 'available', 'equity', 'used_margin']:
+            value = account_info.get(key)
+            if value is None:
+                account_info[key] = 0.0
+            else:
+                # Try to convert to float if possible
+                try:
+                    account_info[key] = float(value)
+                except (ValueError, TypeError):
+                    account_info[key] = 0.0
+
+        trading_stats = calculate_trading_stats(trade_history)
 
         return render_template('trading.html',
             active_trades=active_trades,
@@ -711,6 +717,12 @@ def performance():
         
         # Calculate performance metrics
         performance_metrics = calculate_performance_metrics(trade_history)
+
+        # Defensive: ensure keys expected by template exist
+        if 'total_profit' not in performance_metrics:
+            performance_metrics['total_profit'] = 0
+        if 'total_profit_amount' not in performance_metrics:
+            performance_metrics['total_profit_amount'] = performance_metrics.get('total_profit', 0)
         
         return render_template('performance.html', performance=performance_metrics)
     except Exception as e:
@@ -781,6 +793,13 @@ def strategy():
                     'take_profit': 0,
                     'max_position': 0
                 }
+        
+        # Defensive: ensure performance_data is dict and keys are lists, not methods
+        if not isinstance(performance_data, dict):
+            performance_data = {}
+        for key in ['dates', 'values', 'benchmark']:
+            if key not in performance_data or callable(performance_data[key]):
+                performance_data[key] = []
         
         return render_template('strategy.html',
                              strategies=strategies,

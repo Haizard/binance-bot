@@ -23,9 +23,9 @@ DB_NAME = get_env_var("MONGODB_DB_NAME", "trading_bot")
 
 # Connection settings
 MONGODB_SETTINGS = {
-    "serverSelectionTimeoutMS": 5000,  # Reduced timeout for local connection
-    "connectTimeoutMS": 5000,
-    "socketTimeoutMS": 5000,
+    "serverSelectionTimeoutMS": 30000,  # Increased timeout
+    "connectTimeoutMS": 30000,
+    "socketTimeoutMS": 30000,
     "maxPoolSize": 100,
     "minPoolSize": 10,
     "retryWrites": True,
@@ -113,10 +113,10 @@ def get_database(remote=False, db_name=None):
                 _remote_client.admin.command('ping')
             return _remote_client[db_name or DB_NAME]
     except (ConnectionFailure, ServerSelectionTimeoutError) as e:
-        logger.error(f"MongoDB connection error: {str(e)}")
+        logger.error(f"MongoDB connection error: {str(e)}, URI: {LOCAL_MONGODB_URI if not remote else REMOTE_MONGODB_URI}, Settings: {MONGODB_SETTINGS}")
         raise
     except Exception as e:
-        logger.error(f"Error connecting to MongoDB: {str(e)}")
+        logger.error(f"Error connecting to MongoDB: {str(e)}, URI: {LOCAL_MONGODB_URI if not remote else REMOTE_MONGODB_URI}, Settings: {MONGODB_SETTINGS}")
         raise
 
 def close_connections():
