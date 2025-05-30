@@ -15,7 +15,7 @@ RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Install Python dependencies
-RUN pip install --no-cache-dir -vvv -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir -vvv -r requirements.txt
 
 # Copy the rest of the application
 COPY . .
