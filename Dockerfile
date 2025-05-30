@@ -21,4 +21,4 @@ RUN pip install --no-cache-dir --upgrade pip && pip install --no-cache-dir -vvv 
 COPY . .
 
 # Command to run the bot
-CMD ["python", "agents/market_drop_analyzer_agent.py"]
+CMD ["python", "-m", "agents.market_drop_analyzer_agent"]
