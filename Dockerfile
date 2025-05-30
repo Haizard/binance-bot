@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first to leverage Docker cache
-COPY requirements_minimal.txt requirements.txt
+COPY requirements_minimal.txt .
 
 # Create and activate virtual environment
 RUN python -m venv /opt/venv
