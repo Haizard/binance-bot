@@ -131,96 +131,7 @@ def fit_trendlines_single(data: np.array):
 # --- End of Trendline Calculation Helper Functions ---
 
 class MarketDropAnalyzerAgent:
-    def __init__(self, drop_threshold=-4.0, profit_target=0.02, risk_percentage=0.01):
-        self.name = "MarketDropAnalyzer"
-        self.drop_threshold = Decimal(str(drop_threshold))
-        self.profit_target = Decimal(str(profit_target))
-        self.client = None
-        self.bm = None  # BinanceSocketManager
-        self.holdings = {}  # symbol -> buy_price
-        self.price_data = {}  # symbol -> {'price': Decimal, 'volume': Decimal, 'change': Decimal, 'last_update': datetime}
-        self.active_symbols = set()  # Set of symbols we're currently monitoring
-        self.technical_confirmations = []  # Empty list to disable all technical confirmations
-        # Parameters for RSI-PCA model
-        self.pca_evecs = None
-        self.pca_means = None
-        self.model_coefs = None
-        self.long_threshold = None
-        self.rsi_periods = list(range(2, 25))
-        self.pca_n_components = 3 # Example value, should match training
-        # klines lookback for RSI-PCA needs to be at least max(rsi_periods) + lookahead, plus some buffer
-        self.rsi_pca_klines_lookback = max(self.rsi_periods) + 6 + 10 # max_rsi_period + lookahead + buffer
-        self.model_dir = 'models/rsi_pca'
-        self.evecs_path = os.path.join(self.model_dir, 'pca_evecs.npy')
-        self.means_path = os.path.join(self.model_dir, 'pca_means.npy')
-        self.coefs_path = os.path.join(self.model_dir, 'model_coefs.npy')
-        self.l_thresh_path = os.path.join(self.model_dir, 'long_threshold.txt')
-
-        # Parameters for Hawkes model
-        self.hawkes_kappa = 0.1 # Example value from hawkes.py
-        self.hawkes_lookback = 168 # Example value from hawkes.py
-        self.hawkes_norm_lookback = 336 # Example value from hawkes.py (for ATR/norm_range)
-        self.hawkes_klines_lookback = max(self.hawkes_lookback, self.hawkes_norm_lookback) + 10 # Need enough data for calculations
-
-        # Parameters for Trendline Breakout model
-        self.trendline_lookback = 72 # Example value from trendline_breakout.py
-        self.trendline_klines_lookback = self.trendline_lookback + 10 # Need enough data for calculation
-
-        # Parameters for VSA model
-        self.vsa_norm_lookback = 168 # Example value from vsa.py
-        self.vsa_range_dev_threshold = 1.0 # Example threshold for buy signal (can be tuned)
-        self.vsa_klines_lookback = self.vsa_norm_lookback * 2 + 10 # Need enough data for regression and lookback
-
-        # Parameters for Position Sizing by Volatility
-        self.risk_percentage = Decimal(str(risk_percentage)) # Percentage of account to risk per trade (e.g., 0.01 for 1%)
-        self.atr_lookback = 14 # ATR period
-        self.atr_multiplier = 1.0 # Multiplier for ATR to define risk per share/unit
-        self.sizing_klines_lookback = self.atr_lookback + 10 # Need enough data for ATR calculation
-
-        self.symbol_queue = asyncio.Queue(maxsize=1000)
-        self.processing_symbols = set()
-        self.api_semaphore = asyncio.Semaphore(3)  # Limit concurrent API calls to 3
-        self.markov_agent = MarkovTradingAgent(lookback=5, states=('up', 'down', 'flat'), threshold=0.0001)
-        self.symbol_filters = {}  # symbol -> {'stepSize': ..., 'minQty': ..., 'precision': ...}
-
-    async def setup(self):
-        api_key = os.getenv('BINANCE_API_KEY')
-        api_secret = os.getenv('BINANCE_API_SECRET')
-        self.client = await AsyncClient.create(api_key=api_key, api_secret=api_secret)
-        self.bm = BinanceSocketManager(self.client)
-        
-        # Get initial exchange info and trading symbols
-        exchange_info = await self.client.get_exchange_info()
-        self.trading_symbols = {s['symbol'] for s in exchange_info['symbols'] 
-                              if s['status'] == 'TRADING' and s['symbol'].endswith('USDT')}
-        
-        # Get initial 24h ticker data
-        tickers = await self.client.get_ticker()
-        for ticker in tickers:
-            if ticker['symbol'] in self.trading_symbols:
-                try:
-                    self.price_data[ticker['symbol']] = {
-                        'price': Decimal(ticker['lastPrice']),
-                        'volume': Decimal(ticker['quoteVolume']),
-                        'change': Decimal(ticker['priceChangePercent']),
-                        'last_update': datetime.now()
-                    }
-                except Exception as e:
-                    logger.error(f"Error processing ticker for {ticker['symbol']}: {e}")
-        
-        # Load pre-trained models if specified
-        if 'rsi_pca' in self.technical_confirmations:
-            await self.load_rsi_pca_model()
-        
-        # Store stepSize, minQty, precision, and minNotional for each symbol
-        for s in exchange_info['symbols']:
-            if s['symbol'] in self.trading_symbols:
-                filters = {f['filterType']: f for f in s['filters']}
-                step_size = Decimal(filters['LOT_SIZE']['stepSize']) if 'LOT_SIZE' in filters else Decimal('0.00000001')
-                min_qty = Decimal(filters['LOT_SIZE']['minQty']) if 'LOT_SIZE' in filters else Decimal('0.0')
-                min_notional = Decimal(filters['MIN_NOTIONAL']['minNotional']) if 'MIN_NOTIONAL' in filters else Decimal('0.0')
-class MarketDropAnalyzerAgent:
-    def __init__(self, drop_threshold=-4.0, profit_target=0.02, risk_percentage=0.01):
+    def __init__(self, drop_threshold=-4.0, profit_target=0.03, risk_percentage=0.01):
         self.name = "MarketDropAnalyzer"
         self.drop_threshold = Decimal(str(drop_threshold))
         self.profit_target = Decimal(str(profit_target))
@@ -309,85 +220,6 @@ class MarketDropAnalyzerAgent:
                 min_qty = Decimal(filters['LOT_SIZE']['minQty']) if 'LOT_SIZE' in filters else Decimal('0.0')
                 min_notional = Decimal(filters['MIN_NOTIONAL']['minNotional']) if 'MIN_NOTIONAL' in filters else Decimal('0.0')
                 # Failsafe: if minNotional is missing or zero, set to 5.0
-                if min_notional is None or min_notional == 0:
-                    min_notional = Decimal('5.0')
-                precision = s.get('baseAssetPrecision', 8)
-                self.symbol_filters[s['symbol']] = {
-                    'stepSize': step_size,
-                    'minQty': min_qty,
-                    'precision': precision,
-                    'minNotional': min_notional
-                }
-                logger.debug(f"Symbol {s['symbol']} minNotional set to {min_notional}")
-        
-        logger.info(f"{self.name} setup complete.")
-
-    async def start_symbol_stream(self, symbol: str):
-        """Start WebSocket stream for a symbol."""
-        if symbol in self.active_symbols:
-            return
-        
-        try:
-            # Start 24hr ticker stream
-            stream = self.bm.ticker_24hr_socket(symbol)
-            self.active_symbols.add(symbol)
-            
-            async with stream as stream:
-                while True:
-                    msg = await stream.recv()
-                    if msg:
-                        try:
-                            self.price_data[symbol] = {
-                                'price': Decimal(msg['c']),  # Last price
-                                'volume': Decimal(msg['q']),  # Quote volume
-                                'change': Decimal(msg['P']),  # Price change percent
-                                'last_update': datetime.now()
-                            }
-                            await self.check_symbol(symbol)
-                        except Exception as e:
-                            logger.error(f"Error processing WebSocket message for {symbol}: {e}")
-        except Exception as e:
-            logger.error(f"Error in WebSocket stream for {symbol}: {e}")
-            self.active_symbols.remove(symbol)
-
-    async def check_symbol(self, symbol: str):
-        """Check a single symbol for trading opportunities, with detailed logs."""
-        if symbol not in self.price_data:
-            logger.info(f"{symbol} not in price_data, skipping.")
-            return
-        data = self.price_data[symbol]
-        # Skip if data is too old (more than 5 minutes)
-        if (datetime.now() - data['last_update']).total_seconds() > 300:
-            logger.info(f"{symbol} data too old, skipping.")
-            return
-        # Skip if we already hold this symbol
-        if symbol in self.holdings:
-            buy_price = self.holdings[symbol]
-            current_price = data['price']
-            # Take profit
-            if current_price >= buy_price * (1 + self.profit_target):
-                logger.info(f"Take profit: Selling {symbol} at {current_price} (bought at {buy_price})")
-                await self.place_order(symbol, 'SELL', current_price)
-                del self.holdings[symbol]
-                return
-            # Stop loss
-            if current_price <= buy_price * (1 - self.risk_percentage):
-                logger.info(f"Stop loss: Selling {symbol} at {current_price} (bought at {buy_price})")
-                await self.place_order(symbol, 'SELL', current_price)
-                del self.holdings[symbol]
-                return
-            logger.info(f"{symbol} already held, no sell condition met.")
-            return
-        # Check for drop
-        drop_percent = data['change']
-        if drop_percent <= self.drop_threshold:
-            logger.info(f"Drop detected: {symbol} dropped {drop_percent:.3f}% (threshold: {self.drop_threshold}%) - considering for trade.")
-            # Run filters (e.g., volume, volatility, etc.)
-            filters_passed = await self.apply_filters(symbol, data)
-            logger.info(f"{symbol} filters_passed: {filters_passed}")
-            if not filters_passed:
-                logger.info(f"{symbol} skipped: did not pass filters.")
-                               # Failsafe: if minNotional is missing or zero, set to 5.0
                 if min_notional is None or min_notional == 0:
                     min_notional = Decimal('5.0')
                 precision = s.get('baseAssetPrecision', 8)
@@ -996,80 +828,40 @@ class MarketDropAnalyzerAgent:
 
     async def calculate_quantity(self, symbol, price):
         """
-        Calculates the quantity to buy based on volatility (ATR) and risk percentage.
-        Position Size = (Account Balance * Risk Percentage) / (ATR * ATR Multiplier)
-        Quantity = Position Size / Current Price
+        Calculates the quantity to buy using a fixed margin of $15 per position by default.
+        Only allows opening a new position if the number of open positions is less than the allowed (max positions - reserve).
+        Leaves 2 margins as a reserve (e.g., if 6 possible, only use 4).
         """
         try:
-            # Ensure price is Decimal
             price = Decimal(str(price))
-            # 1. Fetch historical price data for ATR calculation
-            klines = await self.fetch_klines(symbol, AsyncClient.KLINE_INTERVAL_1HOUR, self.sizing_klines_lookback)
-            if not klines or len(klines) < self.sizing_klines_lookback:
-                logger.warning(f"Not enough klines data for position sizing for {symbol}. Need {self.sizing_klines_lookback}, got {len(klines) if klines else 0}.")
-                # Fallback to a small fixed amount if data is insufficient
-                usdt_amount = Decimal('10')
-                qty = usdt_amount / price
-                qty_rounded = Decimal(str(self.round_quantity(symbol, qty)))
-                logger.info(f"[Fallback] Rounded quantity for {symbol}: {qty_rounded}")
-                return float(qty_rounded)
-
-            df = pd.DataFrame(klines, columns=['open_time', 'open', 'high', 'low', 'close', 'volume', \
-                                               'close_time', 'quote_asset_volume', 'number_of_trades', \
-                                               'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore'])
-            df['high'] = df['high'].astype(float)
-            df['low'] = df['low'].astype(float)
-            df['close'] = df['close'].astype(float)
-
-            # 2. Calculate ATR
-            atr_series = ta.atr(df['high'], df['low'], df['close'], length=self.atr_lookback)
-            latest_atr = Decimal(str(atr_series.iloc[-1]))
-
-            if pd.isna(latest_atr) or latest_atr <= 0:
-                logger.warning(f"Could not calculate valid ATR for {symbol} for position sizing.")
-                # Fallback to a small fixed amount
-                usdt_amount = Decimal('10')
-                qty = usdt_amount / price
-                qty_rounded = Decimal(str(self.round_quantity(symbol, qty)))
-                logger.info(f"[Fallback] Rounded quantity for {symbol}: {qty_rounded}")
-                return float(qty_rounded)
-
-            # 3. Get available USDT balance
             usdt_balance = await self.get_balance('USDT')
             usdt_balance = Decimal(str(usdt_balance))
             if usdt_balance <= 0:
                 logger.warning(f"Insufficient USDT balance ({usdt_balance}) for position sizing.")
-                return 0.0 # Cannot buy if no balance
-
-            # 4. Calculate position size and quantity
-            risk_per_unit = latest_atr * Decimal(str(self.atr_multiplier))
-            if risk_per_unit <= 0:
-                 logger.warning(f"Calculated risk per unit is non-positive for {symbol}. ATR: {latest_atr}, Multiplier: {self.atr_multiplier}.")
-                 usdt_amount = Decimal('10')
-                 qty = usdt_amount / price
-                 qty_rounded = Decimal(str(self.round_quantity(symbol, qty)))
-                 logger.info(f"[Fallback] Rounded quantity for {symbol}: {qty_rounded}")
-                 return float(qty_rounded)
-
-            position_size_usdt = (usdt_balance * self.risk_percentage) / risk_per_unit
-            position_size_usdt = min(position_size_usdt, usdt_balance)
-
+                return 0.0
+            margin = Decimal('15')
+            reserve_count = 2
+            max_positions = int(usdt_balance // margin)
+            usable_positions = max(max_positions - reserve_count, 0)
+            open_positions = len(self.holdings)
+            if open_positions >= usable_positions or usable_positions == 0:
+                logger.info(f"Position limit reached or no usable positions (open: {open_positions}, usable: {usable_positions}). No new position will be opened.")
+                return 0.0
+            # Only use margin if enough for at least one more position
+            if usdt_balance < margin:
+                position_size = usdt_balance
+            else:
+                position_size = margin
             if price <= 0:
                 logger.warning(f"Current price for {symbol} is non-positive: {price}.")
-                return 0.0 # Cannot buy if price is zero or negative
-
-            quantity = position_size_usdt / price
+                return 0.0
+            quantity = position_size / price
             quantity_rounded = Decimal(str(self.round_quantity(symbol, quantity)))
-            logger.info(f"[Final] Rounded quantity for {symbol}: {quantity_rounded} (stepSize: {self.symbol_filters.get(symbol, {}).get('stepSize', 'N/A')})")
+            logger.info(f"[Margin] Rounded quantity for {symbol}: {quantity_rounded} (stepSize: {self.symbol_filters.get(symbol, {}).get('stepSize', 'N/A')})")
             return float(quantity_rounded)
-
         except Exception as e:
             logger.error(f"Error calculating quantity for {symbol}: {e}")
-            usdt_amount = Decimal('10')
-            qty = usdt_amount / Decimal(str(price))
-            qty_rounded = Decimal(str(self.round_quantity(symbol, qty)))
-            logger.info(f"[Exception Fallback] Rounded quantity for {symbol}: {qty_rounded}")
-            return float(qty_rounded)
+            return 0.0
 
     async def place_order(self, symbol, side, price, quantity=None):
         """Unified order placement method for BUY and SELL."""
