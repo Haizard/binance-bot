@@ -23,6 +23,7 @@ import signal
 from pymongo import MongoClient, ASCENDING
 import traceback
 import warnings
+import threading
 
 warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*found in sys.modules after import of package.*")
 
@@ -264,6 +265,12 @@ class MarketDropAnalyzerAgent:
             self.kline_ws_tasks.append(asyncio.create_task(self.kline_stream_worker(symbol, AsyncClient.KLINE_INTERVAL_1HOUR)))
         
         logger.info(f"{self.name} setup complete.")
+        # Start heartbeat log thread
+        def heartbeat():
+            while True:
+                logger.info("Bot is alive and running...")
+                time.sleep(300)  # 5 minutes
+        threading.Thread(target=heartbeat, daemon=True).start()
 
     async def kline_stream_worker(self, symbol, interval):
         """WebSocket worker to keep kline cache and MongoDB DB updated for a symbol/interval."""
