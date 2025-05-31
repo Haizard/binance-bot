@@ -37,6 +37,8 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
+print("Starting market_drop_analyzer_agent.py")
+
 # --- Trendline Calculation Helper Functions (Copied from trendline_automation.py) ---
 def check_trend_line(support: bool, pivot: int, slope: float, y: np.array):
     # compute sum of differences between line and prices,
@@ -209,6 +211,7 @@ class MarketDropAnalyzerAgent:
             await asyncio.sleep(delay)
 
     async def setup(self):
+        print("Starting setup()")
         api_key = os.getenv('BINANCE_API_KEY')
         api_secret = os.getenv('BINANCE_API_SECRET')
         self.client = await AsyncClient.create(api_key=api_key, api_secret=api_secret)
@@ -265,6 +268,7 @@ class MarketDropAnalyzerAgent:
             self.kline_ws_tasks.append(asyncio.create_task(self.kline_stream_worker(symbol, AsyncClient.KLINE_INTERVAL_1HOUR)))
         
         logger.info(f"{self.name} setup complete.")
+        print("Starting heartbeat thread")
         # Start heartbeat log thread
         def heartbeat():
             while True:
