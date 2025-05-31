@@ -201,6 +201,7 @@ class MarketDropAnalyzerAgent:
             await asyncio.sleep(delay)
 
     async def setup(self):
+        self.create_klines_table()  # Ensure klines table exists before any access
         api_key = os.getenv('BINANCE_API_KEY')
         api_secret = os.getenv('BINANCE_API_SECRET')
         self.client = await AsyncClient.create(api_key=api_key, api_secret=api_secret)
@@ -255,8 +256,6 @@ class MarketDropAnalyzerAgent:
         self.kline_ws_tasks = []
         for symbol in self.trading_symbols:
             self.kline_ws_tasks.append(asyncio.create_task(self.kline_stream_worker(symbol, AsyncClient.KLINE_INTERVAL_1HOUR)))
-        
-        self.create_klines_table()
         
         logger.info(f"{self.name} setup complete.")
 
