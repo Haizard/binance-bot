@@ -18,6 +18,8 @@ import pandas_ta as ta
 from scipy import linalg as la
 import scipy.stats as stats
 from agents.markov_trading_agent import MarkovTradingAgent
+import sqlite3
+import signal
 
 # Load environment variables from .env file
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
@@ -185,6 +187,19 @@ class MarketDropAnalyzerAgent:
         self.kline_cache = {}  # symbol -> interval -> list of klines (most recent last)
         self.kline_cache_limit = 500  # Max klines to keep per symbol/interval
 
+        # SQLite persistent kline cache
+        self.kline_db_path = 'kline_cache.db'
+        self.kline_db_conn = sqlite3.connect(self.kline_db_path, check_same_thread=False)
+        self.kline_db_cursor = self.kline_db_conn.cursor()
+
+    async def batch_fetch_klines(self, symbols, interval, limit, batch_size=5, delay=1.0):
+        """Fetch klines for a list of symbols in batches, with a delay between batches to avoid rate limits."""
+        for i in range(0, len(symbols), batch_size):
+            batch = symbols[i:i+batch_size]
+            tasks = [self.fetch_klines(symbol, interval, limit) for symbol in batch]
+            await asyncio.gather(*tasks)
+            await asyncio.sleep(delay)
+
     async def setup(self):
         api_key = os.getenv('BINANCE_API_KEY')
         api_secret = os.getenv('BINANCE_API_SECRET')
@@ -233,15 +248,20 @@ class MarketDropAnalyzerAgent:
                 }
                 logger.debug(f"Symbol {s['symbol']} minNotional set to {min_notional}")
         
+        # Prefill kline cache and DB for all trading symbols (batch, rate-limit aware)
+        await self.batch_fetch_klines(list(self.trading_symbols), AsyncClient.KLINE_INTERVAL_1HOUR, 100)
+        
         # Subscribe to kline WebSocket streams for all trading symbols
         self.kline_ws_tasks = []
         for symbol in self.trading_symbols:
             self.kline_ws_tasks.append(asyncio.create_task(self.kline_stream_worker(symbol, AsyncClient.KLINE_INTERVAL_1HOUR)))
         
+        self.create_klines_table()
+        
         logger.info(f"{self.name} setup complete.")
 
     async def kline_stream_worker(self, symbol, interval):
-        """WebSocket worker to keep kline cache updated for a symbol/interval."""
+        """WebSocket worker to keep kline cache and SQLite DB updated for a symbol/interval."""
         stream = self.bm.kline_socket(symbol=symbol, interval=interval)
         if symbol not in self.kline_cache:
             self.kline_cache[symbol] = {}
@@ -262,8 +282,12 @@ class MarketDropAnalyzerAgent:
                         cache.append(kline)
                         if len(cache) > self.kline_cache_limit:
                             cache.pop(0)
+                        # Insert new kline into SQLite DB
+                        self.insert_klines(symbol, interval, [kline])
                     elif k['t'] == cache[-1][0]:
                         cache[-1] = kline
+                        # Update kline in SQLite DB
+                        self.insert_klines(symbol, interval, [kline])
 
     async def start_symbol_stream(self, symbol: str):
         """Start WebSocket stream for a symbol."""
@@ -620,20 +644,21 @@ class MarketDropAnalyzerAgent:
 
     async def fetch_klines(self, symbol: str, interval: str, limit: int):
         """
-        Fetches recent klines data for a symbol with a specified limit, using cache and WebSocket updates.
+        Fetches recent klines data for a symbol with a specified limit, using SQLite cache and WebSocket updates.
+        Adds a delay to avoid hitting REST rate limits.
         """
-        # Try to use cache first
-        cache = self.kline_cache.get(symbol, {}).get(interval, [])
-        if len(cache) >= limit:
-            return cache[-limit:]
+        # Try to use SQLite cache first
+        cached_klines = self.fetch_recent_klines_from_db(symbol, interval, limit)
+        if len(cached_klines) >= limit:
+            return cached_klines[-limit:]
         # If not enough cached, fetch missing from REST and update cache
         try:
+            await asyncio.sleep(0.3)  # Throttle REST requests (300ms delay)
             klines = await self.client.get_historical_klines(symbol, interval, limit=limit)
-            # Update cache
-            if symbol not in self.kline_cache:
-                self.kline_cache[symbol] = {}
-            self.kline_cache[symbol][interval] = klines[-self.kline_cache_limit:]
-            return klines
+            # Insert new klines into the database
+            self.insert_klines(symbol, interval, klines)
+            # Return the most recent klines in ascending order
+            return klines[-limit:]
         except Exception as e:
             logger.error(f"Error fetching klines for {symbol}: {e}")
             return None
@@ -950,14 +975,76 @@ class MarketDropAnalyzerAgent:
             await self.bm.close()
         if self.client:
             await self.client.close_connection()
+        if hasattr(self, 'kline_db_conn') and self.kline_db_conn:
+            self.kline_db_conn.close()
         logger.info(f"{self.name} cleaned up.")
+
+    def create_klines_table(self):
+        """Create the klines table if it doesn't exist."""
+        self.kline_db_cursor.execute('''
+            CREATE TABLE IF NOT EXISTS klines (
+                symbol TEXT,
+                interval TEXT,
+                open_time INTEGER,
+                open TEXT,
+                high TEXT,
+                low TEXT,
+                close TEXT,
+                volume TEXT,
+                close_time INTEGER,
+                quote_asset_volume TEXT,
+                number_of_trades INTEGER,
+                taker_buy_base_asset_volume TEXT,
+                taker_buy_quote_asset_volume TEXT,
+                ignore TEXT,
+                PRIMARY KEY (symbol, interval, open_time)
+            )
+        ''')
+        self.kline_db_conn.commit()
+
+    def insert_klines(self, symbol, interval, klines):
+        """Insert multiple klines into the database."""
+        for k in klines:
+            try:
+                self.kline_db_cursor.execute('''
+                    INSERT OR REPLACE INTO klines VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (symbol, interval, int(k[0]), k[1], k[2], k[3], k[4], k[5], int(k[6]), k[7], int(k[8]), k[9], k[10], k[11]))
+            except Exception as e:
+                logger.error(f"Error inserting kline for {symbol}: {e}")
+        self.kline_db_conn.commit()
+
+    def fetch_recent_klines_from_db(self, symbol, interval, limit):
+        """Fetch the most recent N klines for a symbol/interval from the database."""
+        self.kline_db_cursor.execute('''
+            SELECT open_time, open, high, low, close, volume, close_time, quote_asset_volume, number_of_trades, taker_buy_base_asset_volume, taker_buy_quote_asset_volume, ignore
+            FROM klines WHERE symbol=? AND interval=? ORDER BY open_time DESC LIMIT ?
+        ''', (symbol, interval, limit))
+        rows = self.kline_db_cursor.fetchall()
+        # Return in ascending order (oldest first)
+        return [
+            [row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9], row[10], row[11]]
+            for row in reversed(rows)
+        ]
 
 async def main():
     agent = MarketDropAnalyzerAgent()
     await agent.setup()
+    # Register signal handlers for graceful shutdown
+    loop = asyncio.get_running_loop()
+    stop_event = asyncio.Event()
+    def _signal_handler():
+        stop_event.set()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(sig, _signal_handler)
+        except NotImplementedError:
+            # add_signal_handler may not be implemented on Windows
+            pass
     try:
         await agent.run()
     except KeyboardInterrupt:
+        pass
+    finally:
         await agent.cleanup()
 
 if __name__ == "__main__":
