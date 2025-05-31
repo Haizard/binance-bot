@@ -182,6 +182,8 @@ class MarketDropAnalyzerAgent:
         self.api_semaphore = asyncio.Semaphore(3)  # Limit concurrent API calls to 3
         self.markov_agent = MarkovTradingAgent(lookback=5, states=('up', 'down', 'flat'), threshold=0.0001)
         self.symbol_filters = {}  # symbol -> {'stepSize': ..., 'minQty': ..., 'precision': ...}
+        self.kline_cache = {}  # symbol -> interval -> list of klines (most recent last)
+        self.kline_cache_limit = 500  # Max klines to keep per symbol/interval
 
     async def setup(self):
         api_key = os.getenv('BINANCE_API_KEY')
@@ -231,7 +233,37 @@ class MarketDropAnalyzerAgent:
                 }
                 logger.debug(f"Symbol {s['symbol']} minNotional set to {min_notional}")
         
+        # Subscribe to kline WebSocket streams for all trading symbols
+        self.kline_ws_tasks = []
+        for symbol in self.trading_symbols:
+            self.kline_ws_tasks.append(asyncio.create_task(self.kline_stream_worker(symbol, AsyncClient.KLINE_INTERVAL_1HOUR)))
+        
         logger.info(f"{self.name} setup complete.")
+
+    async def kline_stream_worker(self, symbol, interval):
+        """WebSocket worker to keep kline cache updated for a symbol/interval."""
+        stream = self.bm.kline_socket(symbol=symbol, interval=interval)
+        if symbol not in self.kline_cache:
+            self.kline_cache[symbol] = {}
+        if interval not in self.kline_cache[symbol]:
+            self.kline_cache[symbol][interval] = []
+        async with stream as s:
+            async for msg in s:
+                if msg and msg.get('k'):
+                    k = msg['k']
+                    # Build kline in REST format
+                    kline = [
+                        k['t'], k['o'], k['h'], k['l'], k['c'], k['v'],
+                        k['T'], k['q'], k['n'], k['V'], k['Q'], k['B']
+                    ]
+                    cache = self.kline_cache[symbol][interval]
+                    # If this is a new kline, append; if update, replace last
+                    if not cache or k['t'] > cache[-1][0]:
+                        cache.append(kline)
+                        if len(cache) > self.kline_cache_limit:
+                            cache.pop(0)
+                    elif k['t'] == cache[-1][0]:
+                        cache[-1] = kline
 
     async def start_symbol_stream(self, symbol: str):
         """Start WebSocket stream for a symbol."""
@@ -588,15 +620,19 @@ class MarketDropAnalyzerAgent:
 
     async def fetch_klines(self, symbol: str, interval: str, limit: int):
         """
-        Fetches recent klines data for a symbol with a specified limit.
+        Fetches recent klines data for a symbol with a specified limit, using cache and WebSocket updates.
         """
+        # Try to use cache first
+        cache = self.kline_cache.get(symbol, {}).get(interval, [])
+        if len(cache) >= limit:
+            return cache[-limit:]
+        # If not enough cached, fetch missing from REST and update cache
         try:
-            # Fetch klines with a limit
-            klines = await self.client.get_historical_klines(
-                symbol,
-                interval,
-                limit=limit
-            )
+            klines = await self.client.get_historical_klines(symbol, interval, limit=limit)
+            # Update cache
+            if symbol not in self.kline_cache:
+                self.kline_cache[symbol] = {}
+            self.kline_cache[symbol][interval] = klines[-self.kline_cache_limit:]
             return klines
         except Exception as e:
             logger.error(f"Error fetching klines for {symbol}: {e}")
