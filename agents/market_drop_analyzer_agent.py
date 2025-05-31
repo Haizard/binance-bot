@@ -20,6 +20,7 @@ import scipy.stats as stats
 from agents.markov_trading_agent import MarkovTradingAgent
 import sqlite3
 import signal
+from pymongo import MongoClient, ASCENDING
 
 # Load environment variables from .env file
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
@@ -187,10 +188,12 @@ class MarketDropAnalyzerAgent:
         self.kline_cache = {}  # symbol -> interval -> list of klines (most recent last)
         self.kline_cache_limit = 500  # Max klines to keep per symbol/interval
 
-        # SQLite persistent kline cache
-        self.kline_db_path = 'kline_cache.db'
-        self.kline_db_conn = sqlite3.connect(self.kline_db_path, check_same_thread=False)
-        self.kline_db_cursor = self.kline_db_conn.cursor()
+        # MongoDB persistent kline cache
+        mongo_url = os.getenv('MONGODB_URL', 'mongodb+srv://haithammisape:hrz123@binance.5hz1tvp.mongodb.net/?retryWrites=true&w=majority&appName=binance')
+        self.mongo_client = MongoClient(mongo_url)
+        self.mongo_db = self.mongo_client['binance']
+        self.klines_collection = self.mongo_db['klines']
+        self.klines_collection.create_index([('symbol', ASCENDING), ('interval', ASCENDING), ('open_time', ASCENDING)], unique=True)
 
     async def batch_fetch_klines(self, symbols, interval, limit, batch_size=5, delay=1.0):
         """Fetch klines for a list of symbols in batches, with a delay between batches to avoid rate limits."""
@@ -201,7 +204,6 @@ class MarketDropAnalyzerAgent:
             await asyncio.sleep(delay)
 
     async def setup(self):
-        self.create_klines_table()  # Ensure klines table exists before any access
         api_key = os.getenv('BINANCE_API_KEY')
         api_secret = os.getenv('BINANCE_API_SECRET')
         self.client = await AsyncClient.create(api_key=api_key, api_secret=api_secret)
@@ -260,7 +262,7 @@ class MarketDropAnalyzerAgent:
         logger.info(f"{self.name} setup complete.")
 
     async def kline_stream_worker(self, symbol, interval):
-        """WebSocket worker to keep kline cache and SQLite DB updated for a symbol/interval."""
+        """WebSocket worker to keep kline cache and MongoDB DB updated for a symbol/interval."""
         stream = self.bm.kline_socket(symbol=symbol, interval=interval)
         if symbol not in self.kline_cache:
             self.kline_cache[symbol] = {}
@@ -281,11 +283,11 @@ class MarketDropAnalyzerAgent:
                         cache.append(kline)
                         if len(cache) > self.kline_cache_limit:
                             cache.pop(0)
-                        # Insert new kline into SQLite DB
+                        # Insert new kline into MongoDB
                         self.insert_klines(symbol, interval, [kline])
                     elif k['t'] == cache[-1][0]:
                         cache[-1] = kline
-                        # Update kline in SQLite DB
+                        # Update kline in MongoDB
                         self.insert_klines(symbol, interval, [kline])
 
     async def start_symbol_stream(self, symbol: str):
@@ -643,10 +645,10 @@ class MarketDropAnalyzerAgent:
 
     async def fetch_klines(self, symbol: str, interval: str, limit: int):
         """
-        Fetches recent klines data for a symbol with a specified limit, using SQLite cache and WebSocket updates.
+        Fetches recent klines data for a symbol with a specified limit, using MongoDB cache and WebSocket updates.
         Adds a delay to avoid hitting REST rate limits.
         """
-        # Try to use SQLite cache first
+        # Try to use MongoDB cache first
         cached_klines = self.fetch_recent_klines_from_db(symbol, interval, limit)
         if len(cached_klines) >= limit:
             return cached_klines[-limit:]
@@ -974,55 +976,44 @@ class MarketDropAnalyzerAgent:
             await self.bm.close()
         if self.client:
             await self.client.close_connection()
-        if hasattr(self, 'kline_db_conn') and self.kline_db_conn:
-            self.kline_db_conn.close()
         logger.info(f"{self.name} cleaned up.")
 
-    def create_klines_table(self):
-        """Create the klines table if it doesn't exist."""
-        self.kline_db_cursor.execute('''
-            CREATE TABLE IF NOT EXISTS klines (
-                symbol TEXT,
-                interval TEXT,
-                open_time INTEGER,
-                open TEXT,
-                high TEXT,
-                low TEXT,
-                close TEXT,
-                volume TEXT,
-                close_time INTEGER,
-                quote_asset_volume TEXT,
-                number_of_trades INTEGER,
-                taker_buy_base_asset_volume TEXT,
-                taker_buy_quote_asset_volume TEXT,
-                ignore TEXT,
-                PRIMARY KEY (symbol, interval, open_time)
-            )
-        ''')
-        self.kline_db_conn.commit()
-
     def insert_klines(self, symbol, interval, klines):
-        """Insert multiple klines into the database."""
+        """Insert multiple klines into MongoDB."""
         for k in klines:
-            try:
-                self.kline_db_cursor.execute('''
-                    INSERT OR REPLACE INTO klines VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (symbol, interval, int(k[0]), k[1], k[2], k[3], k[4], k[5], int(k[6]), k[7], int(k[8]), k[9], k[10], k[11]))
-            except Exception as e:
-                logger.error(f"Error inserting kline for {symbol}: {e}")
-        self.kline_db_conn.commit()
+            doc = {
+                'symbol': symbol,
+                'interval': interval,
+                'open_time': int(k[0]),
+                'open': k[1],
+                'high': k[2],
+                'low': k[3],
+                'close': k[4],
+                'volume': k[5],
+                'close_time': int(k[6]),
+                'quote_asset_volume': k[7],
+                'number_of_trades': int(k[8]),
+                'taker_buy_base_asset_volume': k[9],
+                'taker_buy_quote_asset_volume': k[10],
+                'ignore': k[11]
+            }
+            self.klines_collection.update_one(
+                {'symbol': symbol, 'interval': interval, 'open_time': doc['open_time']},
+                {'$set': doc},
+                upsert=True
+            )
 
     def fetch_recent_klines_from_db(self, symbol, interval, limit):
-        """Fetch the most recent N klines for a symbol/interval from the database."""
-        self.kline_db_cursor.execute('''
-            SELECT open_time, open, high, low, close, volume, close_time, quote_asset_volume, number_of_trades, taker_buy_base_asset_volume, taker_buy_quote_asset_volume, ignore
-            FROM klines WHERE symbol=? AND interval=? ORDER BY open_time DESC LIMIT ?
-        ''', (symbol, interval, limit))
-        rows = self.kline_db_cursor.fetchall()
-        # Return in ascending order (oldest first)
+        """Fetch the most recent N klines for a symbol/interval from MongoDB."""
+        cursor = self.klines_collection.find({'symbol': symbol, 'interval': interval}).sort('open_time', -1).limit(limit)
+        rows = list(cursor)[::-1]  # Return in ascending order
         return [
-            [row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7], row[8], row[9], row[10], row[11]]
-            for row in reversed(rows)
+            [
+                row['open_time'], row['open'], row['high'], row['low'], row['close'], row['volume'],
+                row['close_time'], row['quote_asset_volume'], row['number_of_trades'],
+                row['taker_buy_base_asset_volume'], row['taker_buy_quote_asset_volume'], row['ignore']
+            ]
+            for row in rows
         ]
 
 async def main():
