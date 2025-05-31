@@ -196,7 +196,7 @@ class MarketDropAnalyzerAgent:
         self.klines_collection = self.mongo_db['klines']
         self.klines_collection.create_index([('symbol', ASCENDING), ('interval', ASCENDING), ('open_time', ASCENDING)], unique=True)
 
-    async def batch_fetch_klines(self, symbols, interval, limit, batch_size=5, delay=1.0):
+    async def batch_fetch_klines(self, symbols, interval, limit, batch_size=1, delay=5.0):
         """Fetch klines for a list of symbols in batches, with a delay between batches to avoid rate limits."""
         for i in range(0, len(symbols), batch_size):
             batch = symbols[i:i+batch_size]
@@ -644,6 +644,20 @@ class MarketDropAnalyzerAgent:
             logger.error(f"Error checking RSI-PCA signal for {symbol}: {e}")
             return False # Return False in case of error
 
+    async def fetch_klines_with_retry(self, symbol, interval, limit, retries=3, delay=2):
+        for attempt in range(retries):
+            try:
+                await asyncio.sleep(0.3)  # Throttle REST requests (300ms delay)
+                return await self.client.get_historical_klines(symbol, interval, limit=limit)
+            except asyncio.TimeoutError as e:
+                logger.error(f"Timeout fetching klines for {symbol}, attempt {attempt+1}/{retries}")
+                await asyncio.sleep(delay * (2 ** attempt))  # Exponential backoff
+            except Exception as e:
+                logger.error(f"Error fetching klines for {symbol} (attempt {attempt+1}/{retries}): {e}\n{traceback.format_exc()}")
+                break
+        logger.error(f"Failed to fetch klines for {symbol} after {retries} retries.")
+        return None
+
     async def fetch_klines(self, symbol: str, interval: str, limit: int):
         """
         Fetches recent klines data for a symbol with a specified limit, using MongoDB cache and WebSocket updates.
@@ -654,16 +668,11 @@ class MarketDropAnalyzerAgent:
         if len(cached_klines) >= limit:
             return cached_klines[-limit:]
         # If not enough cached, fetch missing from REST and update cache
-        try:
-            await asyncio.sleep(0.3)  # Throttle REST requests (300ms delay)
-            klines = await self.client.get_historical_klines(symbol, interval, limit=limit)
-            # Insert new klines into the database
+        klines = await self.fetch_klines_with_retry(symbol, interval, limit, retries=3, delay=2)
+        if klines:
             self.insert_klines(symbol, interval, klines)
-            # Return the most recent klines in ascending order
             return klines[-limit:]
-        except Exception as e:
-            logger.error(f"Error fetching klines for {symbol}: {e}\n{traceback.format_exc()}")
-            return None
+        return None
 
     async def check_hawkes_buy_signal(self, symbol: str) -> bool:
         """
