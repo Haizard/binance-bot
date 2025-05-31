@@ -21,6 +21,7 @@ from agents.markov_trading_agent import MarkovTradingAgent
 import sqlite3
 import signal
 from pymongo import MongoClient, ASCENDING
+import traceback
 
 # Load environment variables from .env file
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
@@ -661,7 +662,7 @@ class MarketDropAnalyzerAgent:
             # Return the most recent klines in ascending order
             return klines[-limit:]
         except Exception as e:
-            logger.error(f"Error fetching klines for {symbol}: {e}")
+            logger.error(f"Error fetching klines for {symbol}: {e}\n{traceback.format_exc()}")
             return None
 
     async def check_hawkes_buy_signal(self, symbol: str) -> bool:
