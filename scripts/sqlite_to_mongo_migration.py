@@ -3,7 +3,7 @@ from pymongo import MongoClient, ASCENDING
 import os
 
 # SQLite DB path
-SQLITE_DB_PATH = '../kline_cache.db'  # Adjust path if needed
+SQLITE_DB_PATH = 'kline_cache.db'  # Use the same path as your check script
 # MongoDB connection
 MONGO_URL = os.getenv('MONGODB_URL', 'mongodb+srv://haithammisape:hrz123@binance.5hz1tvp.mongodb.net/?retryWrites=true&w=majority&appName=binance')
 MONGO_DB_NAME = 'binance'
