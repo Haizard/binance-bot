@@ -22,6 +22,9 @@ import sqlite3
 import signal
 from pymongo import MongoClient, ASCENDING
 import traceback
+import warnings
+
+warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*found in sys.modules after import of package.*")
 
 # Load environment variables from .env file
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
