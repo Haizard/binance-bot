@@ -147,7 +147,7 @@ class MarketDropAnalyzerAgent:
         self.profit_target = Decimal(str(profit_target))
         self.client = None
         self.bm = None  # BinanceSocketManager
-        self.holdings = {}  # symbol -> buy_price
+        self.holdings = {}  # symbol -> {'price': buy_price, 'quantity': quantity}
         self.price_data = {}  # symbol -> {'price': Decimal, 'volume': Decimal, 'change': Decimal, 'last_update': datetime}
         self.active_symbols = set()  # Set of symbols we're currently monitoring
         self.technical_confirmations = []  # Empty list to disable all technical confirmations
@@ -345,19 +345,23 @@ class MarketDropAnalyzerAgent:
             return
         # Skip if we already hold this symbol
         if symbol in self.holdings:
-            buy_price = self.holdings[symbol]
+            holding = self.holdings[symbol]
+            buy_price = holding['price']
+            quantity = holding['quantity']
             current_price = data['price']
             # Take profit
             if current_price >= buy_price * (1 + self.profit_target):
                 logger.info(f"Take profit: Selling {symbol} at {current_price} (bought at {buy_price})")
-                await self.place_order(symbol, 'SELL', current_price)
-                del self.holdings[symbol]
+                sell_result = await self.place_order(symbol, 'SELL', current_price, quantity)
+                if sell_result:
+                    del self.holdings[symbol]
                 return
             # Stop loss
             if current_price <= buy_price * (1 - self.risk_percentage):
                 logger.info(f"Stop loss: Selling {symbol} at {current_price} (bought at {buy_price})")
-                await self.place_order(symbol, 'SELL', current_price)
-                del self.holdings[symbol]
+                sell_result = await self.place_order(symbol, 'SELL', current_price, quantity)
+                if sell_result:
+                    del self.holdings[symbol]
                 return
             logger.info(f"{symbol} already held, no sell condition met.")
             return
@@ -408,7 +412,7 @@ class MarketDropAnalyzerAgent:
                 logger.info(f"Placing BUY order for {symbol}: quantity={quantity}, price={data['price']}")
                 order = await self.place_order(symbol, 'BUY', data['price'], quantity)
                 logger.info(f"Order placed for {symbol}: {order}")
-                self.holdings[symbol] = data['price']
+                self.holdings[symbol] = {'price': data['price'], 'quantity': quantity}
             except Exception as e:
                 logger.error(f"Error placing BUY order for {symbol}: {e}")
                 return
@@ -962,7 +966,8 @@ class MarketDropAnalyzerAgent:
         # Place a market buy order (real trading, be careful!)
         try:
             order = await self.client.create_order(symbol=symbol, side='BUY', type='MARKET', quantity=qty)
-            self.holdings[symbol] = price
+            if order:
+                self.holdings[symbol] = {'price': price, 'quantity': qty}
             logger.info(f"Bought {symbol} at {price} (qty: {qty}) | Order: {order}")
             return order
         except Exception as e:
@@ -973,7 +978,8 @@ class MarketDropAnalyzerAgent:
         # Place a market sell order (real trading, be careful!)
         try:
             order = await self.client.create_order(symbol=symbol, side='SELL', type='MARKET', quantity=qty)
-            del self.holdings[symbol]
+            if order:
+                del self.holdings[symbol]
             logger.info(f"Sold {symbol} at {price} (qty: {qty}) | Order: {order}")
             return order
         except Exception as e:
